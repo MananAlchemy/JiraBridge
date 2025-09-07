@@ -1,0 +1,323 @@
+import React, { useState, useEffect } from 'react';
+import { Play, Square, RefreshCw, Settings, Clock, Calendar, TrendingUp } from 'lucide-react';
+import { ScreenshotGrid } from './ScreenshotGrid';
+import { TimeTrackingHistory } from './TimeTrackingHistory';
+import { useScreenshots } from '../hooks/useScreenshots';
+import { useTimeTracking } from '../hooks/useTimeTracking';
+import { AppSettings } from '../types';
+import { formatUtils } from '../utils/format';
+
+interface MainDashboardProps {
+  onSettingsClick: () => void;
+  settings: AppSettings;
+  onTimeTrackingUpdate?: (data: { isTracking: boolean; totalTimeToday: string; lastCapture: Date | null; isCapturing: boolean }) => void;
+}
+
+export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate }) => {
+  const {
+    currentSession,
+    isTracking,
+    totalTimeToday,
+    dailyData,
+    startTracking,
+    stopTracking,
+    addScreenshotToSession,
+    getFormattedTime,
+    getWeeklyStats
+  } = useTimeTracking();
+
+  const {
+    screenshots,
+    isCapturing,
+    lastCapture,
+    captureScreenshot,
+    deleteScreenshot,
+    syncScreenshots
+  } = useScreenshots(addScreenshotToSession);
+
+  const [nextCapture, setNextCapture] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  useEffect(() => {
+    // Set up automatic screenshot capture only when tracking is active
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (isTracking) {
+      interval = setInterval(() => {
+        captureScreenshot();
+      }, settings.screenshotInterval * 1000); // Convert seconds to milliseconds
+
+      // Calculate next capture time
+      if (lastCapture) {
+        const next = new Date(lastCapture.getTime() + settings.screenshotInterval * 1000);
+        setNextCapture(next);
+      }
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [settings.screenshotInterval, lastCapture, captureScreenshot, isTracking]);
+
+  useEffect(() => {
+    // Handle electron toggle tracking event
+    const handleToggleTracking = () => {
+      handleStartStopTracking();
+    };
+
+    window.addEventListener('toggle-tracking', handleToggleTracking);
+
+    return () => {
+      window.removeEventListener('toggle-tracking', handleToggleTracking);
+    };
+  }, [isTracking]);
+
+  // Update parent component with time tracking data
+  useEffect(() => {
+    if (onTimeTrackingUpdate) {
+      onTimeTrackingUpdate({
+        isTracking,
+        totalTimeToday: getFormattedTime(totalTimeToday),
+        lastCapture,
+        isCapturing
+      });
+    }
+  }, [isTracking, totalTimeToday, lastCapture, isCapturing, getFormattedTime, onTimeTrackingUpdate]);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    await syncScreenshots();
+    setIsSyncing(false);
+  };
+
+  const unsyncedCount = screenshots.filter(s => !s.synced).length;
+  const weeklyStats = getWeeklyStats();
+
+  const handleStartStopTracking = () => {
+    if (isTracking) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
+  };
+
+  return (
+    <div className="bg-gray-50">
+      <div className="p-6">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Time Tracking Dashboard</h1>
+          <p className="text-gray-600">Monitor your work time with automatic screenshot capture</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isTracking ? 'bg-green-100' : 'bg-gray-100'}`}>
+                  {isTracking ? (
+                    <Square className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Play className="w-5 h-5 text-gray-600" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Time Tracking</h3>
+                  <p className={`text-lg font-bold ${isTracking ? 'text-green-600' : 'text-gray-600'}`}>
+                    {isTracking ? 'Active' : 'Stopped'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-gray-500">Today</div>
+                <div className="text-lg font-bold text-blue-600">
+                  {getFormattedTime(totalTimeToday)}
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              {currentSession && isTracking && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Current session:</span>
+                  <span className="font-medium text-gray-900">
+                    {getFormattedTime(currentSession.duration || 0)}
+                  </span>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Screenshots today:</span>
+                <span className="font-medium text-gray-900">
+                  {screenshots.filter(s => {
+                    const today = new Date().toDateString();
+                    return new Date(s.timestamp).toDateString() === today;
+                  }).length}
+                </span>
+              </div>
+              
+              <button
+                onClick={handleStartStopTracking}
+                className={`w-full text-white py-2 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 ${
+                  isTracking 
+                    ? 'bg-red-600 hover:bg-red-700' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isTracking ? (
+                  <>
+                    <Square className="w-4 h-4" />
+                    <span>Stop Tracking</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    <span>Start Tracking</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div 
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Weekly Stats</h3>
+                  <p className="text-lg font-bold text-purple-600">
+                    {weeklyStats.formattedTotalTime}
+                  </p>
+                </div>
+              </div>
+              <div className="text-purple-600 text-lg">
+                {showHistory ? '▼' : '▶'}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Days tracked:</span>
+                <span className="font-medium text-gray-900">{weeklyStats.daysTracked}/7</span>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Average/day:</span>
+                <span className="font-medium text-gray-900">{weeklyStats.formattedAverageTime}</span>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Total screenshots:</span>
+                <span className="font-medium text-gray-900">{weeklyStats.totalScreenshots}</span>
+              </div>
+              
+              <div className="text-xs text-gray-400 mt-2">
+                Click to {showHistory ? 'hide' : 'view'} detailed history
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Screenshots</h3>
+                  <p className="text-lg font-bold text-orange-600">{screenshots.length}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-gray-500">Unsynced</div>
+                <div className="text-lg font-bold text-red-600">{unsyncedCount}</div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Total size:</span>
+                <span className="font-medium text-gray-900">
+                  {formatUtils.fileSize(screenshots.reduce((sum, s) => sum + s.size, 0))}
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Last capture:</span>
+                <span className="font-medium text-gray-900">
+                  {lastCapture ? formatUtils.time(lastCapture) : 'Never'}
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                <button
+                  onClick={handleSync}
+                  disabled={isSyncing || unsyncedCount === 0}
+                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {isSyncing ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  <span>{isSyncing ? 'Syncing...' : `Sync ${unsyncedCount}`}</span>
+                </button>
+                <button
+                  onClick={onSettingsClick}
+                  className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>Settings</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Recent Screenshots</h2>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-500">
+                {isTracking ? (
+                  <>Capturing every {settings.screenshotInterval} second{settings.screenshotInterval !== 1 ? 's' : ''}</>
+                ) : (
+                  'Tracking stopped'
+                )}
+              </span>
+              {nextCapture && isTracking && (
+                <span className="text-sm text-gray-500">
+                  Next: {nextCapture.toLocaleTimeString([], { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                  })}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          <ScreenshotGrid
+            screenshots={screenshots}
+            onDelete={deleteScreenshot}
+          />
+        </div>
+
+        {/* Time Tracking History */}
+        {showHistory && (
+          <div className="mt-8">
+            <TimeTrackingHistory
+              dailyData={dailyData}
+              getFormattedTime={getFormattedTime}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
