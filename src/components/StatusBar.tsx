@@ -1,6 +1,6 @@
 import React from 'react';
-import { Wifi, WifiOff, Camera, Clock, User } from 'lucide-react';
-import { User as UserType } from '../types';
+import { Wifi, WifiOff, Camera, Clock, User, Image, RefreshCw, HardDrive } from 'lucide-react';
+import { User as UserType, Screenshot } from '../types';
 
 interface StatusBarProps {
   user: UserType;
@@ -9,7 +9,11 @@ interface StatusBarProps {
   isCapturing: boolean;
   isTracking?: boolean;
   totalTimeToday?: string;
+  screenshots: Screenshot[];
+  unsyncedCount: number;
+  isSyncing: boolean;
   onSignOut: () => void;
+  onSync: () => void;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -19,7 +23,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   isCapturing,
   isTracking = false,
   totalTimeToday = '0s',
-  onSignOut
+  screenshots,
+  unsyncedCount,
+  isSyncing,
+  onSignOut,
+  onSync
 }) => {
   const formatLastCapture = (date: Date | null) => {
     if (!date) return 'Never';
@@ -30,6 +38,14 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     if (minutes < 1) return 'Just now';
     if (minutes === 1) return '1 minute ago';
     return `${minutes} minutes ago`;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -63,6 +79,33 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span className="text-sm text-gray-600">
             Today: {totalTimeToday}
           </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Image className="w-4 h-4 text-orange-500" />
+          <span className="text-sm text-gray-600">
+            Screenshots: {screenshots.length}
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <HardDrive className="w-4 h-4 text-gray-500" />
+          <span className="text-sm text-gray-600">
+            Size: {formatFileSize(screenshots.reduce((sum, s) => sum + s.size, 0))}
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={onSync}
+            disabled={isSyncing || unsyncedCount === 0}
+            className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>
+              {isSyncing ? 'Syncing...' : `Sync (${unsyncedCount})`}
+            </span>
+          </button>
         </div>
       </div>
 

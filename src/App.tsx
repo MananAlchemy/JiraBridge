@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { MainDashboard } from './components/MainDashboard';
 import { UpdateModal } from './components/UpdateModal';
@@ -47,6 +47,23 @@ function App() {
     lastCapture: null as Date | null,
     isCapturing: false
   });
+
+  const [screenshotsData, setScreenshotsData] = useState({
+    screenshots: [] as any[],
+    unsyncedCount: 0,
+    isSyncing: false
+  });
+
+  const handleScreenshotsUpdate = (data: { screenshots: any[]; unsyncedCount: number; isSyncing: boolean }) => {
+    setScreenshotsData(data);
+  };
+
+  const [syncTrigger, setSyncTrigger] = useState(0);
+
+  const handleSync = async () => {
+    // Trigger sync by updating the trigger state
+    setSyncTrigger(prev => prev + 1);
+  };
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -109,6 +126,8 @@ function App() {
             onSettingsClick={() => setShowSettings(true)}
             settings={settings}
             onTimeTrackingUpdate={setTimeTrackingData}
+            onScreenshotsUpdate={handleScreenshotsUpdate}
+            syncTrigger={syncTrigger}
           />
         </div>
         
@@ -119,7 +138,11 @@ function App() {
           isCapturing={timeTrackingData.isCapturing}
           isTracking={timeTrackingData.isTracking}
           totalTimeToday={timeTrackingData.totalTimeToday}
+          screenshots={screenshotsData.screenshots}
+          unsyncedCount={screenshotsData.unsyncedCount}
+          isSyncing={screenshotsData.isSyncing}
           onSignOut={signOut}
+          onSync={handleSync}
         />
 
         {updateAvailable && updateInfo && (

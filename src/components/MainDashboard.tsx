@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, RefreshCw, Settings, Clock, Calendar, TrendingUp } from 'lucide-react';
+import { Play, Square, Settings, TrendingUp } from 'lucide-react';
 import { ScreenshotGrid } from './ScreenshotGrid';
 import { TimeTrackingHistory } from './TimeTrackingHistory';
 import { useScreenshots } from '../hooks/useScreenshots';
 import { useTimeTracking } from '../hooks/useTimeTracking';
 import { AppSettings } from '../types';
-import { formatUtils } from '../utils/format';
 
 interface MainDashboardProps {
   onSettingsClick: () => void;
   settings: AppSettings;
   onTimeTrackingUpdate?: (data: { isTracking: boolean; totalTimeToday: string; lastCapture: Date | null; isCapturing: boolean }) => void;
+  onScreenshotsUpdate?: (data: { screenshots: any[]; unsyncedCount: number; isSyncing: boolean }) => void;
+  syncTrigger?: number;
 }
 
-export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate }) => {
+export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate, onScreenshotsUpdate, syncTrigger }) => {
   const {
     currentSession,
     isTracking,
@@ -73,6 +74,14 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     };
   }, [isTracking]);
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    await syncScreenshots();
+    setIsSyncing(false);
+  };
+
+  const unsyncedCount = screenshots.filter(s => !s.synced).length;
+
   // Update parent component with time tracking data
   useEffect(() => {
     if (onTimeTrackingUpdate) {
@@ -85,13 +94,23 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     }
   }, [isTracking, totalTimeToday, lastCapture, isCapturing, getFormattedTime, onTimeTrackingUpdate]);
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    await syncScreenshots();
-    setIsSyncing(false);
-  };
+  // Update parent component with screenshots data
+  useEffect(() => {
+    if (onScreenshotsUpdate) {
+      onScreenshotsUpdate({
+        screenshots,
+        unsyncedCount,
+        isSyncing
+      });
+    }
+  }, [screenshots, unsyncedCount, isSyncing, onScreenshotsUpdate]);
 
-  const unsyncedCount = screenshots.filter(s => !s.synced).length;
+  // Handle sync trigger from StatusBar
+  useEffect(() => {
+    if (syncTrigger && syncTrigger > 0) {
+      handleSync();
+    }
+  }, [syncTrigger]);
   const weeklyStats = getWeeklyStats();
 
   const handleStartStopTracking = () => {
@@ -106,11 +125,22 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     <div className="bg-gray-50">
       <div className="p-6">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Time Tracking Dashboard</h1>
-          <p className="text-gray-600">Monitor your work time with automatic screenshot capture</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Time Tracking Dashboard</h1>
+              <p className="text-gray-600">Monitor your work time with automatic screenshot capture</p>
+            </div>
+            <button
+              onClick={onSettingsClick}
+              className="bg-orange-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
+            >
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8">
           {/* Combined Time Tracking & Weekly Stats Box */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -215,63 +245,6 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               
               <div className="text-xs text-gray-400 mt-2">
                 Click to {showHistory ? 'hide' : 'view'} detailed history
-              </div>
-            </div>
-          </div>
-
-          {/* Screenshots & Settings Box */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">Screenshots</h3>
-                  <p className="text-lg font-bold text-orange-600">{screenshots.length}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-gray-500">Unsynced</div>
-                <div className="text-lg font-bold text-red-600">{unsyncedCount}</div>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Total size:</span>
-                <span className="font-medium text-gray-900">
-                  {formatUtils.fileSize(screenshots.reduce((sum, s) => sum + s.size, 0))}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Last capture:</span>
-                <span className="font-medium text-gray-900">
-                  {lastCapture ? formatUtils.time(lastCapture) : 'Never'}
-                </span>
-              </div>
-              
-              <div className="space-y-2">
-                <button
-                  onClick={handleSync}
-                  disabled={isSyncing || unsyncedCount === 0}
-                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                >
-                  {isSyncing ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  <span>{isSyncing ? 'Syncing...' : `Sync ${unsyncedCount}`}</span>
-                </button>
-                <button
-                  onClick={onSettingsClick}
-                  className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span>Settings</span>
-                </button>
               </div>
             </div>
           </div>
