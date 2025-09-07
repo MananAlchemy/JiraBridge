@@ -216,6 +216,14 @@ ipcMain.handle('install-update', () => {
   }
 });
 
+// Authentication IPC handlers
+ipcMain.handle('open-auth-url', async () => {
+  const { shell } = require('electron');
+  const authUrl = 'https://jirabridge.alchemytech.in/?from=electron';
+  logger.info('Opening auth URL:', authUrl);
+  await shell.openExternal(authUrl);
+});
+
 
 // Auto-updater configuration
 function setupAutoUpdater() {
@@ -276,6 +284,127 @@ function setupAutoUpdater() {
   // Check for updates on startup
   autoUpdater.checkForUpdates();
 }
+
+// Register deeplink protocol
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('jira-bridge', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('jira-bridge');
+}
+
+// Function to decode JWT token
+function decodeJWT(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    logger.error('Error decoding JWT:', error);
+    return null;
+  }
+}
+
+// Handle deeplink protocol
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  logger.info('Received deeplink:', url);
+  
+  // Parse the URL to extract authentication data
+  try {
+    const urlObj = new URL(url);
+    const params = new URLSearchParams(urlObj.search);
+    
+    // Get the JWT token
+    const token = params.get('token');
+    
+    let userData = {
+      id: params.get('id'),
+      email: params.get('email'),
+      name: params.get('name'),
+      avatar: params.get('avatar'),
+      token: token
+    };
+    
+    // If we have a JWT token, decode it to get user information
+    if (token) {
+      const decodedToken = decodeJWT(token);
+      if (decodedToken) {
+        userData = {
+          id: decodedToken.sub || userData.id,
+          email: decodedToken.email || userData.email,
+          name: decodedToken.name || userData.name,
+          avatar: decodedToken.picture || userData.avatar,
+          token: token
+        };
+      }
+    }
+    
+    logger.info('Parsed user data:', userData);
+    
+    // Send user data to renderer process
+    if (mainWindow) {
+      mainWindow.webContents.send('auth-success', userData);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  } catch (error) {
+    logger.error('Error parsing deeplink URL:', error);
+  }
+});
+
+// Handle deeplink on Windows
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  // Someone tried to run a second instance, we should focus our window instead
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  
+  // Handle deeplink from command line arguments
+  const url = commandLine.find(arg => arg.startsWith('jira-bridge://'));
+  if (url) {
+    logger.info('Received deeplink from second instance:', url);
+    // Process the URL similar to open-url event
+    try {
+      const urlObj = new URL(url);
+      const params = new URLSearchParams(urlObj.search);
+      
+      // Get the JWT token
+      const token = params.get('token');
+      
+      let userData = {
+        id: params.get('id'),
+        email: params.get('email'),
+        name: params.get('name'),
+        avatar: params.get('avatar'),
+        token: token
+      };
+      
+      // If we have a JWT token, decode it to get user information
+      if (token) {
+        const decodedToken = decodeJWT(token);
+        if (decodedToken) {
+          userData = {
+            id: decodedToken.sub || userData.id,
+            email: decodedToken.email || userData.email,
+            name: decodedToken.name || userData.name,
+            avatar: decodedToken.picture || userData.avatar,
+            token: token
+          };
+        }
+      }
+      
+      if (mainWindow) {
+        mainWindow.webContents.send('auth-success', userData);
+      }
+    } catch (error) {
+      logger.error('Error parsing deeplink from second instance:', error);
+    }
+  }
+});
 
 // App event handlers
 app.whenReady().then(() => {

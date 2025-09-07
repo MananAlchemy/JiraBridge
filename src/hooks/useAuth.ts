@@ -6,7 +6,7 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking for existing auth
+    // Check for existing auth
     const checkAuth = async () => {
       const savedUser = localStorage.getItem('user');
       if (savedUser) {
@@ -16,27 +16,58 @@ export const useAuth = () => {
     };
 
     checkAuth();
+
+    // Listen for deeplink authentication success
+    const handleAuthSuccess = (event: any, userData: any) => {
+      console.log('Received auth success:', userData);
+      
+      if (userData && userData.id && userData.email) {
+        const authenticatedUser: User = {
+          id: userData.id,
+          email: userData.email,
+          name: userData.name || userData.email.split('@')[0],
+          avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || userData.email)}&background=6366f1&color=fff`
+        };
+        
+        console.log('Setting authenticated user:', authenticatedUser);
+        setUser(authenticatedUser);
+        localStorage.setItem('user', JSON.stringify(authenticatedUser));
+        setLoading(false);
+      } else {
+        console.log('Invalid user data received:', userData);
+        setLoading(false);
+      }
+    };
+
+    // Set up deeplink listener
+    if (window.electronAPI) {
+      window.electronAPI.onAuthSuccess(handleAuthSuccess);
+    }
+
+    // Cleanup listener on unmount
+    return () => {
+      if (window.electronAPI) {
+        window.electronAPI.removeAllListeners('auth-success');
+      }
+    };
   }, []);
 
   const signInWithGoogle = async () => {
     setLoading(true);
     
-    // Simulate Google OAuth flow
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockUser: User = {
-        id: '1',
-        email: 'user@example.com',
-        name: 'John Doe',
-        avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      // Open the JiraBridge web authentication URL
+      if (window.electronAPI) {
+        await window.electronAPI.openAuthUrl();
+        // Keep loading state until deeplink is received
+        // The loading will be set to false in the handleAuthSuccess callback
+      } else {
+        // Fallback for web environment
+        window.open('https://jirabridge.alchemytech.in/?from=electron', '_blank');
+        setLoading(false);
+      }
     } catch (error) {
       console.error('Sign in failed:', error);
-    } finally {
       setLoading(false);
     }
   };

@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
   getScreenInfo: () => ipcRenderer.invoke('get-screen-info'),
   
+  // Authentication functionality
+  openAuthUrl: () => ipcRenderer.invoke('open-auth-url'),
+  onAuthSuccess: (callback) => ipcRenderer.on('auth-success', callback),
+  
   // App events
   onCaptureScreenshot: (callback) => ipcRenderer.on('capture-screenshot', callback),
   onOpenSettings: (callback) => ipcRenderer.on('open-settings', callback),

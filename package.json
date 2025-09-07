@@ -5,6 +5,12 @@
   "description": "Professional screenshot management desktop application",
   "main": "electron/main.js",
   "homepage": "./",
+  "protocols": [
+    {
+      "name": "jira-bridge",
+      "schemes": ["jira-bridge"]
+    }
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
