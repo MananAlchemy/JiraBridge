@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Play, Square, Settings, TrendingUp } from 'lucide-react';
 import { ScreenshotGrid } from './ScreenshotGrid';
 import { TimeTrackingHistory } from './TimeTrackingHistory';
+import JiraConfig from './JiraConfig';
+import TaskSelector from './TaskSelector';
 import { useScreenshots } from '../hooks/useScreenshots';
 import { useTimeTracking } from '../hooks/useTimeTracking';
+import { useJira } from '../hooks/useJira';
+import { useAuth } from '../hooks/useAuth';
 import { AppSettings } from '../types';
 
 interface MainDashboardProps {
@@ -15,6 +19,14 @@ interface MainDashboardProps {
 }
 
 export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate, onScreenshotsUpdate, syncTrigger }) => {
+  const { user } = useAuth();
+  const { 
+    config: jiraConfig,
+    selectedTask, 
+    connectJira, 
+    selectTask 
+  } = useJira();
+  
   const {
     currentSession,
     isTracking,
@@ -25,7 +37,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     addScreenshotToSession,
     getFormattedTime,
     getWeeklyStats
-  } = useTimeTracking();
+  } = useTimeTracking(selectedTask);
 
   const {
     screenshots,
@@ -140,9 +152,9 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 mb-8">
-          {/* Combined Time Tracking & Weekly Stats Box */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Time Tracking Box */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-96 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isTracking ? 'bg-green-100' : 'bg-gray-100'}`}>
@@ -167,12 +179,28 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               </div>
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1">
               {currentSession && isTracking && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">Current session:</span>
                   <span className="font-medium text-gray-900">
                     {getFormattedTime(currentSession.duration || 0)}
+                  </span>
+                </div>
+              )}
+              
+              {selectedTask ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Selected task:</span>
+                  <span className="font-medium text-blue-600">
+                    {selectedTask.key}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Selected task:</span>
+                  <span className="font-medium text-gray-400">
+                    No task selected
                   </span>
                 </div>
               )}
@@ -189,10 +217,13 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               
               <button
                 onClick={handleStartStopTracking}
+                disabled={!selectedTask && !isTracking}
                 className={`w-full text-white py-2 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 ${
-                  isTracking 
-                    ? 'bg-red-600 hover:bg-red-700' 
-                    : 'bg-green-600 hover:bg-green-700'
+                  !selectedTask && !isTracking
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : isTracking 
+                      ? 'bg-red-600 hover:bg-red-700' 
+                      : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
                 {isTracking ? (
@@ -203,7 +234,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
                 ) : (
                   <>
                     <Play className="w-4 h-4" />
-                    <span>Start Tracking</span>
+                    <span>{selectedTask ? 'Start Tracking' : 'Select Task First'}</span>
                   </>
                 )}
               </button>
@@ -248,7 +279,59 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               </div>
             </div>
           </div>
+
+          {/* Jira Project Box */}
+          {user && (
+            <div className="h-96 flex flex-col">
+              <JiraConfig 
+                userEmail={user.email} 
+                onJiraConnected={(config) => connectJira(config!)}
+                onProjectChange={(projectKey) => {
+                  // Clear task selection when project changes
+                  if (selectedTask && selectedTask.project.key !== projectKey) {
+                    selectTask(null);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Jira Task Box */}
+          {user && (
+            <div className="h-96 flex flex-col">
+              <TaskSelector 
+                userEmail={user.email}
+                onTaskSelect={selectTask}
+                selectedTask={selectedTask}
+                isProjectSelected={!!jiraConfig?.project}
+                selectedProject={jiraConfig?.project}
+              />
+            </div>
+          )}
         </div>
+
+        {/* Selected Task Display */}
+        {selectedTask && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-blue-900">Selected Jira Task</h3>
+                <p className="text-blue-700">
+                  <span className="font-medium">{selectedTask.key}</span>: {selectedTask.summary}
+                </p>
+                <p className="text-sm text-blue-600">
+                  {selectedTask.project.name} • {selectedTask.status}
+                </p>
+              </div>
+              <button
+                onClick={() => selectTask(null)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">

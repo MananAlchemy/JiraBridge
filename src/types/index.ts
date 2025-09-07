@@ -52,6 +52,11 @@ export interface TimeTrackingSession {
   duration?: number; // in milliseconds
   screenshots: string[]; // screenshot IDs
   isActive: boolean;
+  jiraTask?: {
+    key: string;
+    summary: string;
+    project: string;
+  };
 }
 
 export interface DailyTimeTracking {

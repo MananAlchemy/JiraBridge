@@ -4,8 +4,9 @@ import { storage } from '../utils/storage';
 import { logger } from '../utils/logger';
 import { formatUtils } from '../utils/format';
 import { APP_CONSTANTS } from '../constants';
+import { JiraTask } from '../services/jira.service';
 
-export const useTimeTracking = () => {
+export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
   const [currentSession, setCurrentSession] = useState<TimeTrackingSession | null>(null);
   const [dailyData, setDailyData] = useState<DailyTimeTracking[]>([]);
   const [isTracking, setIsTracking] = useState(false);
@@ -102,18 +103,26 @@ export const useTimeTracking = () => {
         id: sessionId,
         startTime: now,
         screenshots: [],
-        isActive: true
+        isActive: true,
+        jiraTask: selectedJiraTask ? {
+          key: selectedJiraTask.key,
+          summary: selectedJiraTask.summary,
+          project: selectedJiraTask.project.name
+        } : undefined
       };
 
       setCurrentSession(newSession);
       setIsTracking(true);
       saveCurrentSession(newSession);
       
-      logger.info('Time tracking started:', { sessionId });
+      logger.info('Time tracking started:', { 
+        sessionId, 
+        jiraTask: selectedJiraTask?.key 
+      });
     } catch (error) {
       logger.error('Failed to start time tracking:', error);
     }
-  }, [saveCurrentSession]);
+  }, [saveCurrentSession, selectedJiraTask]);
 
   const stopTracking = useCallback(() => {
     try {
