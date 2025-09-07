@@ -110,7 +110,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
           <p className="text-gray-600">Monitor your work time with automatic screenshot capture</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Combined Time Tracking & Weekly Stats Box */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -177,43 +178,39 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
                 )}
               </button>
             </div>
-          </div>
 
-          <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
+            {/* Weekly Stats Section */}
+            <div className="border-t border-gray-100 pt-4 mt-4">
+              <div 
+                className="flex items-center justify-between mb-3 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors"
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 text-sm">Weekly Stats</h4>
+                    <p className="text-sm font-bold text-purple-600">
+                      {weeklyStats.formattedTotalTime}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">Weekly Stats</h3>
-                  <p className="text-lg font-bold text-purple-600">
-                    {weeklyStats.formattedTotalTime}
-                  </p>
+                <div className="text-purple-600 text-sm">
+                  {showHistory ? '▼' : '▶'}
                 </div>
-              </div>
-              <div className="text-purple-600 text-lg">
-                {showHistory ? '▼' : '▶'}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Days tracked:</span>
-                <span className="font-medium text-gray-900">{weeklyStats.daysTracked}/7</span>
               </div>
               
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Average/day:</span>
-                <span className="font-medium text-gray-900">{weeklyStats.formattedAverageTime}</span>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Total screenshots:</span>
-                <span className="font-medium text-gray-900">{weeklyStats.totalScreenshots}</span>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Days tracked:</span>
+                  <span className="font-medium text-gray-900">{weeklyStats.daysTracked}/7</span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Average/day:</span>
+                  <span className="font-medium text-gray-900">{weeklyStats.formattedAverageTime}</span>
+                </div>
               </div>
               
               <div className="text-xs text-gray-400 mt-2">
@@ -222,6 +219,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
             </div>
           </div>
 
+          {/* Screenshots & Settings Box */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
