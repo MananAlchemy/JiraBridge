@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, User, Calendar, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { jiraService, JiraTask } from '../services/jira.service';
+import { TASK_STATUS_COLORS, TASK_PRIORITY_COLORS, JIRA_ERRORS } from '../constants/jira';
+import { JiraError } from '../utils/errorHandler';
 
 interface TaskSelectorProps {
   userEmail: string;
@@ -31,7 +33,7 @@ export default function TaskSelector({ userEmail, onTaskSelect, selectedTask, is
     }
   }, [userEmail, isProjectSelected, selectedProject, selectedTask, onTaskSelect]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (): Promise<void> => {
     if (!selectedProject) return;
     
     setIsLoading(true);
@@ -40,8 +42,11 @@ export default function TaskSelector({ userEmail, onTaskSelect, selectedTask, is
     try {
       const userTasks = await jiraService.getUserTasks(selectedProject);
       setTasks(userTasks);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch tasks');
+    } catch (err) {
+      const errorMessage = err instanceof JiraError 
+        ? err.message 
+        : JIRA_ERRORS.FETCH_TASKS_FAILED;
+      setError(errorMessage);
       console.error('Error fetching tasks:', err);
     } finally {
       setIsLoading(false);
@@ -65,34 +70,13 @@ export default function TaskSelector({ userEmail, onTaskSelect, selectedTask, is
   };
 
   const getPriorityColor = (priority: string): string => {
-    switch (priority.toLowerCase()) {
-      case 'highest':
-      case 'critical':
-        return 'text-red-400 bg-red-900/20 border-red-500/30';
-      case 'high':
-        return 'text-orange-400 bg-orange-900/20 border-orange-500/30';
-      case 'medium':
-        return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
-      case 'low':
-        return 'text-green-400 bg-green-900/20 border-green-500/30';
-      default:
-        return 'text-gray-400 bg-gray-900/20 border-gray-500/30';
-    }
+    return TASK_PRIORITY_COLORS[priority as keyof typeof TASK_PRIORITY_COLORS] || 
+           TASK_PRIORITY_COLORS.default;
   };
 
   const getStatusColor = (status: string): string => {
-    switch (status.toLowerCase()) {
-      case 'in progress':
-        return 'text-blue-400 bg-blue-900/20 border-blue-500/30';
-      case 'to do':
-      case 'open':
-        return 'text-gray-400 bg-gray-900/20 border-gray-500/30';
-      case 'done':
-      case 'closed':
-        return 'text-green-400 bg-green-900/20 border-green-500/30';
-      default:
-        return 'text-purple-400 bg-purple-900/20 border-purple-500/30';
-    }
+    return TASK_STATUS_COLORS[status as keyof typeof TASK_STATUS_COLORS] || 
+           TASK_STATUS_COLORS.default;
   };
 
   return (

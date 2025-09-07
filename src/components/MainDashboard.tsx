@@ -4,9 +4,11 @@ import { ScreenshotGrid } from './ScreenshotGrid';
 import { TimeTrackingHistory } from './TimeTrackingHistory';
 import JiraConfig from './JiraConfig';
 import TaskSelector from './TaskSelector';
+import { WorkLogModal } from './WorkLogModal';
 import { useScreenshots } from '../hooks/useScreenshots';
 import { useTimeTracking } from '../hooks/useTimeTracking';
 import { useJira } from '../hooks/useJira';
+import { useWorkLog } from '../hooks/useWorkLog';
 import { useAuth } from '../hooks/useAuth';
 import { AppSettings } from '../types';
 
@@ -51,6 +53,14 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
   const [nextCapture, setNextCapture] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showWorkLogModal, setShowWorkLogModal] = useState(false);
+  const [pendingSession, setPendingSession] = useState<{
+    startTime: Date;
+    endTime: Date;
+    timeSpentSeconds: number;
+  } | null>(null);
+
+  const { logWorkToTempo, updateTaskStatus } = useWorkLog();
 
   useEffect(() => {
     // Set up automatic screenshot capture only when tracking is active
@@ -127,9 +137,49 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
 
   const handleStartStopTracking = () => {
     if (isTracking) {
-      stopTracking();
+      // Show work log modal when stopping tracking
+      if (currentSession && selectedTask) {
+        const now = new Date();
+        const timeSpentSeconds = Math.floor((now.getTime() - currentSession.startTime.getTime()) / 1000);
+        
+        setPendingSession({
+          startTime: currentSession.startTime,
+          endTime: now,
+          timeSpentSeconds
+        });
+        setShowWorkLogModal(true);
+      } else {
+        stopTracking();
+      }
     } else {
       startTracking();
+    }
+  };
+
+  const handleWorkLogSubmit = async (workLogData: {
+    description: string;
+    startTime: Date;
+    endTime: Date;
+    taskKey: string;
+    timeSpentSeconds: number;
+  }) => {
+    if (!jiraConfig?.userKey) {
+      throw new Error('Jira user key not found. Please reconnect to Jira.');
+    }
+
+    await logWorkToTempo(workLogData, jiraConfig.userKey);
+  };
+
+  const handleStatusChange = async (taskKey: string, newStatus: string) => {
+    await updateTaskStatus(taskKey, newStatus);
+  };
+
+  const handleWorkLogModalClose = () => {
+    setShowWorkLogModal(false);
+    setPendingSession(null);
+    // Stop tracking after modal is closed
+    if (isTracking) {
+      stopTracking();
     }
   };
 
@@ -370,6 +420,20 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               getFormattedTime={getFormattedTime}
             />
           </div>
+        )}
+
+        {/* Work Log Modal */}
+        {showWorkLogModal && pendingSession && selectedTask && (
+          <WorkLogModal
+            isOpen={showWorkLogModal}
+            onClose={handleWorkLogModalClose}
+            task={selectedTask}
+            startTime={pendingSession.startTime}
+            endTime={pendingSession.endTime}
+            timeSpentSeconds={pendingSession.timeSpentSeconds}
+            onWorkLogSubmit={handleWorkLogSubmit}
+            onStatusChange={handleStatusChange}
+          />
         )}
       </div>
     </div>

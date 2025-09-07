@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
-import { jiraService, JiraConfig, JiraProject } from '../services/jira.service';
+import { jiraService, JiraProject } from '../services/jira.service';
+import type { JiraConfig } from '../services/jira.service';
+import { config } from '../utils/config.js';
+import { JIRA_CONFIG, JIRA_ERRORS } from '../constants/jira.js';
+import { JiraError } from '../utils/errorHandler.js';
 
 interface JiraConfigProps {
   userEmail: string;
   onJiraConnected: (config: JiraConfig | null) => void;
   onProjectChange?: (projectKey: string | null) => void;
 }
-
-const ADMIN_TOKEN = 'Njc2NTgyNjY3MDA2Ops2sKkM9s+DmPPkvcdyeX7pri5n';
-const SELF_HOSTED_URL = 'https://jira.alchemytech.in';
 
 export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange }: JiraConfigProps) {
   const [jiraUrl, setJiraUrl] = useState('');
@@ -45,20 +45,20 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
     }
   }, [jiraType, userEmail, isConnected]);
 
-  const fetchUserProjects = async () => {
+  const fetchUserProjects = async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
     
     try {
       // Set up config for self-hosted
-      const config: JiraConfig = {
-        url: SELF_HOSTED_URL,
+      const jiraConfig: JiraConfig = {
+        url: config.jira.url,
         email: userEmail,
-        token: ADMIN_TOKEN,
+        token: config.jira.adminToken,
         type: 'self-hosted'
       };
       
-      jiraService.setConfig(config);
+      jiraService.setConfig(jiraConfig);
       
       // Test connection and get user details
       const userData = await jiraService.testConnection();
@@ -70,21 +70,24 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
       
       // Save credentials to localStorage
       const fullConfig: JiraConfig = {
-        ...config,
+        ...jiraConfig,
         project: project,
         displayName: userData.displayName,
         userKey: userData.key
       };
       
-      localStorage.setItem('jiraConfig', JSON.stringify(fullConfig));
+      localStorage.setItem(JIRA_CONFIG.STORAGE.CONFIG, JSON.stringify(fullConfig));
       
       // If there's only one project, select it automatically
       if (userProjects.length === 1) {
         setProject(userProjects[0].key);
-        handleProjectSelect(userProjects[0].key);
+        await handleProjectSelect(userProjects[0].key);
       }
-    } catch (err) {
-      setError('Failed to connect to self-hosted Jira. Please check your access.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof JiraError 
+        ? err.message 
+        : JIRA_ERRORS.FETCH_PROJECTS_FAILED;
+      setError(errorMessage);
       console.error('Error fetching projects:', err);
     } finally {
       setIsLoading(false);
@@ -145,30 +148,33 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
     }
   };
 
-  const handleProjectSelect = async (selectedProject: string) => {
+  const handleProjectSelect = async (selectedProject: string): Promise<void> => {
     setProject(selectedProject);
     
     try {
-      const config: JiraConfig = {
-        url: SELF_HOSTED_URL,
+      const jiraConfig: JiraConfig = {
+        url: config.jira.url,
         email: userEmail,
-        token: ADMIN_TOKEN,
+        token: config.jira.adminToken,
         type: 'self-hosted',
         project: selectedProject,
         userKey: userKey || undefined
       };
       
-      jiraService.setConfig(config);
-      localStorage.setItem('jiraConfig', JSON.stringify(config));
+      jiraService.setConfig(jiraConfig);
+      localStorage.setItem(JIRA_CONFIG.STORAGE.CONFIG, JSON.stringify(jiraConfig));
       setIsConnected(true);
-      onJiraConnected(config);
+      onJiraConnected(jiraConfig);
       
       // Notify parent component about project change
       if (onProjectChange) {
         onProjectChange(selectedProject);
       }
-    } catch (err) {
-      setError('Failed to select project');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof JiraError 
+        ? err.message 
+        : 'Failed to select project';
+      setError(errorMessage);
     }
   };
 
@@ -308,7 +314,7 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
                   <span className="text-blue-800 font-medium">Self-Hosted Jira</span>
                 </div>
                 <p className="text-blue-700 text-sm">
-                  Using admin credentials to access your tasks from {SELF_HOSTED_URL}
+                  Using admin credentials to access your tasks from {config.jira.url}
                 </p>
               </div>
 
