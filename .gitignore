@@ -81,6 +81,18 @@ dist-electron/
 *.blockmap
 *.yml
 
+# Electron Builder outputs
+out/
+app/
+release/
+latest-*.yml
+*.snap
+
+# Build artifacts
+*.map
+*.min.js
+*.min.css
+
 # Temporary folders
 tmp/
 temp/
