@@ -94,6 +94,8 @@ class JiraService {
           'Authorization': this.getAuthHeader(),
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'X-Atlassian-Token': 'no-check', // Disable XSRF check
+          'X-Requested-With': 'XMLHttpRequest', // Indicate AJAX request
           ...options.headers,
         },
       });
@@ -244,11 +246,32 @@ class JiraService {
 
     const jiraConfig = this.jiraConfig!;
     
+    // Validate userKey
+    if (!workLogData.userKey) {
+      throw new JiraError('User key is required for Tempo logging', 'MISSING_USER_KEY');
+    }
+    
+    // Convert seconds to Jira time format (e.g., "1h 30m")
+    const formatTimeSpent = (seconds: number): string => {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      
+      if (hours > 0 && minutes > 0) {
+        return `${hours}h ${minutes}m`;
+      } else if (hours > 0) {
+        return `${hours}h`;
+      } else if (minutes > 0) {
+        return `${minutes}m`;
+      } else {
+        return '1m'; // Minimum time
+      }
+    };
+    
     const tempoWorkLogData = {
       worker: workLogData.userKey,
       comment: workLogData.description,
       started: workLogData.startTime.toISOString(),
-      endDate: workLogData.endTime.toISOString(),
+      endDate: workLogData.endTime.toISOString(), // Add endDate like in working code
       timeSpentSeconds: workLogData.timeSpentSeconds,
       billableSeconds: workLogData.timeSpentSeconds,
       originTaskId: workLogData.taskKey,
@@ -257,23 +280,87 @@ class JiraService {
     };
 
     try {
-      const response = await fetch(`${jiraConfig.url}${JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS}`, {
+      const tempoUrl = `${jiraConfig.url}${JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS}`;
+      const authHeader = this.getAuthHeader();
+      
+      console.log('=== TEMPO API DEBUG INFO ===');
+      console.log('Full URL:', tempoUrl);
+      console.log('Jira Config:', {
+        url: jiraConfig.url,
+        type: jiraConfig.type,
+        email: jiraConfig.email,
+        hasToken: !!jiraConfig.token,
+        userKey: workLogData.userKey
+      });
+      console.log('Auth Header:', authHeader);
+      console.log('Request Data:', tempoWorkLogData);
+      console.log('============================');
+
+      // Use IPC to make the request through the main process
+      if (!window.electronAPI || !(window.electronAPI as any).proxyHttpRequest) {
+        throw new JiraError('Electron API not available', 'ELECTRON_API_UNAVAILABLE');
+      }
+      
+      const response = await (window.electronAPI as any).proxyHttpRequest({
         method: 'POST',
+        url: tempoUrl,
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${jiraConfig.token}`,
+          'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.ADMIN_TOKEN}`, // Use admin token like working code
         },
-        body: JSON.stringify(tempoWorkLogData)
+        body: tempoWorkLogData
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw errorHandler.handleApiError(
-          { response: { status: response.status, data: errorText } },
-          'Tempo work log submission'
-        );
+        console.error('Tempo API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: response.body,
+          url: `${jiraConfig.url}${JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS}`,
+          headers: response.headers
+        });
+        
+        // If Tempo fails, try fallback to regular Jira worklog
+        if (response.status === 403 || response.status === 401) {
+          console.log('Tempo access denied, trying fallback to regular Jira worklog...');
+          try {
+            return this.logWork(workLogData.taskKey, formatTimeSpent(workLogData.timeSpentSeconds), workLogData.description);
+          } catch (fallbackError) {
+            console.error('Fallback worklog also failed:', fallbackError);
+            throw new JiraError(
+              'Both Tempo and regular Jira worklog failed. Please check your permissions and try again.',
+              'WORKLOG_FAILED',
+              response.status,
+              fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError))
+            );
+          }
+        }
+        
+                  throw errorHandler.handleApiError(
+                    { response: { status: response.status, data: response.body } },
+                    'Tempo work log submission'
+                  );
       }
+      
+      console.log('Tempo worklog submitted successfully');
     } catch (error) {
+      console.error('Tempo logging error:', error);
+      
+      // If it's a network or permission error, try fallback to regular Jira worklog
+      if (error instanceof JiraError && (error.code === 'HTTP_403' || error.code === 'HTTP_401')) {
+        console.log('Tempo access denied, trying fallback to regular Jira worklog...');
+        try {
+          return this.logWork(workLogData.taskKey, formatTimeSpent(workLogData.timeSpentSeconds), workLogData.description);
+        } catch (fallbackError) {
+          console.error('Fallback worklog also failed:', fallbackError);
+          throw new JiraError(
+            'Both Tempo and regular Jira worklog failed. Please check your permissions.',
+            'WORKLOG_FAILED',
+            undefined,
+            fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError))
+          );
+        }
+      }
+      
       throw errorHandler.handleApiError(error, 'Tempo work log submission');
     }
   }
@@ -318,6 +405,82 @@ class JiraService {
     } catch (error) {
       throw errorHandler.handleApiError(error, 'Updating task status');
     }
+  }
+
+  async testTempoConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+    if (!this.isConfigured()) {
+      throw new JiraError(JIRA_ERRORS.INVALID_CONFIG, 'NOT_CONFIGURED');
+    }
+
+    const jiraConfig = this.jiraConfig!;
+    const endpoints = [
+      JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS,
+      JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS_V3,
+      JIRA_CONFIG.ENDPOINTS.TEMPO_WORKLOGS_V2
+    ];
+    
+    for (const endpoint of endpoints) {
+      const tempoUrl = `${jiraConfig.url}${endpoint}`;
+      
+      try {
+        console.log(`Testing Tempo connection with endpoint: ${endpoint}`, { url: tempoUrl });
+        
+        // Try a simple GET request to test access using admin token via IPC
+        if (!window.electronAPI || !(window.electronAPI as any).proxyHttpRequest) {
+          throw new JiraError('Electron API not available', 'ELECTRON_API_UNAVAILABLE');
+        }
+        
+        const response = await (window.electronAPI as any).proxyHttpRequest({
+          method: 'GET',
+          url: tempoUrl,
+          headers: {
+            'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.ADMIN_TOKEN}`, // Use admin token
+          }
+        });
+
+        console.log(`Tempo connection test response for ${endpoint}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+
+        if (response.status === 403) {
+          console.log(`Access denied for ${endpoint}, trying next endpoint...`);
+          continue; // Try next endpoint
+        } else if (response.status === 401) {
+          return {
+            success: false,
+            message: 'Authentication failed. Please check your Jira credentials.',
+            details: { status: response.status, statusText: response.statusText, endpoint }
+          };
+        } else if (response.status === 404) {
+          console.log(`Endpoint ${endpoint} not found, trying next endpoint...`);
+          continue; // Try next endpoint
+        } else if (response.ok) {
+          return {
+            success: true,
+            message: `Tempo API connection successful using ${endpoint}!`,
+            details: { status: response.status, endpoint }
+          };
+        } else {
+          console.log(`Unexpected status ${response.status} for ${endpoint}, trying next endpoint...`);
+          continue; // Try next endpoint
+        }
+      } catch (error) {
+        console.error(`Tempo connection test failed for ${endpoint}:`, error);
+        continue; // Try next endpoint
+      }
+    }
+    
+    // If we get here, all endpoints failed
+    return {
+      success: false,
+      message: 'All Tempo API endpoints failed. Tempo Timesheets may not be installed, configured, or you may not have the required permissions.',
+      details: { 
+        testedEndpoints: endpoints,
+        suggestion: 'Please check with your Jira administrator about Tempo Timesheets installation and your user permissions.'
+      }
+    };
   }
 }
 

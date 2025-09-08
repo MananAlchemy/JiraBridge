@@ -10,7 +10,6 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
   const [currentSession, setCurrentSession] = useState<TimeTrackingSession | null>(null);
   const [dailyData, setDailyData] = useState<DailyTimeTracking[]>([]);
   const [isTracking, setIsTracking] = useState(false);
-  const [totalTimeToday, setTotalTimeToday] = useState(0);
 
   useEffect(() => {
     loadTimeTrackingData();
@@ -26,29 +25,6 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       return () => clearInterval(interval);
     }
   }, [isTracking, currentSession]);
-
-  const loadTimeTrackingData = useCallback(() => {
-    try {
-      const saved = storage.get<DailyTimeTracking[]>(APP_CONSTANTS.TIME_TRACKING.STORAGE_KEY, []);
-      setDailyData(saved);
-      logger.info('Time tracking data loaded:', { count: saved.length });
-    } catch (error) {
-      logger.error('Failed to load time tracking data:', error);
-    }
-  }, []);
-
-  const loadCurrentSession = useCallback(() => {
-    try {
-      const saved = storage.get<TimeTrackingSession | null>(APP_CONSTANTS.TIME_TRACKING.SESSION_STORAGE_KEY, null);
-      if (saved) {
-        setCurrentSession(saved);
-        setIsTracking(saved.isActive);
-        logger.info('Current session loaded:', { id: saved.id, isActive: saved.isActive });
-      }
-    } catch (error) {
-      logger.error('Failed to load current session:', error);
-    }
-  }, []);
 
   const saveTimeTrackingData = useCallback((data: DailyTimeTracking[]) => {
     try {
@@ -67,6 +43,67 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       logger.error('Failed to save current session:', error);
     }
   }, []);
+
+  const loadTimeTrackingData = useCallback(() => {
+    try {
+      const saved = storage.get<DailyTimeTracking[]>(APP_CONSTANTS.TIME_TRACKING.STORAGE_KEY, []);
+      setDailyData(saved || []);
+      logger.info('Time tracking data loaded:', { count: (saved || []).length });
+    } catch (error) {
+      logger.error('Failed to load time tracking data:', error);
+    }
+  }, []);
+
+  const loadCurrentSession = useCallback(() => {
+    try {
+      const saved = storage.get<TimeTrackingSession | null>(APP_CONSTANTS.TIME_TRACKING.SESSION_STORAGE_KEY, null);
+      if (saved) {
+        // Validate the saved session
+        const now = new Date();
+        const sessionAge = now.getTime() - saved.startTime.getTime();
+        const maxSessionAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+        
+        // If session is too old or not properly formatted, clear it
+        if (sessionAge > maxSessionAge || !saved.startTime || !saved.id) {
+          logger.warn('Clearing invalid or expired session:', { 
+            sessionAge: Math.round(sessionAge / 1000 / 60) + ' minutes',
+            hasStartTime: !!saved.startTime,
+            hasId: !!saved.id
+          });
+          storage.remove(APP_CONSTANTS.TIME_TRACKING.SESSION_STORAGE_KEY);
+          setCurrentSession(null);
+          setIsTracking(false);
+          return;
+        }
+        
+        // If session is active but seems stale (more than 1 hour without updates), deactivate it
+        if (saved.isActive && sessionAge > 60 * 60 * 1000) { // 1 hour
+          logger.warn('Deactivating stale session:', { 
+            sessionAge: Math.round(sessionAge / 1000 / 60) + ' minutes'
+          });
+          const deactivatedSession = { ...saved, isActive: false };
+          setCurrentSession(deactivatedSession);
+          setIsTracking(false);
+          saveCurrentSession(deactivatedSession);
+          return;
+        }
+        
+        setCurrentSession(saved);
+        setIsTracking(saved.isActive);
+        logger.info('Current session loaded:', { 
+          id: saved.id, 
+          isActive: saved.isActive,
+          sessionAge: Math.round(sessionAge / 1000 / 60) + ' minutes'
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to load current session:', error);
+      // Clear any corrupted session data
+      storage.remove(APP_CONSTANTS.TIME_TRACKING.SESSION_STORAGE_KEY);
+      setCurrentSession(null);
+      setIsTracking(false);
+    }
+  }, [saveCurrentSession]);
 
   const getTodayKey = useCallback(() => {
     return new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -155,7 +192,6 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       setDailyData(updatedDailyData);
       setCurrentSession(null);
       setIsTracking(false);
-      setTotalTimeToday(updatedToday.totalTime);
       
       saveTimeTrackingData(updatedDailyData);
       saveCurrentSession(null);
@@ -238,6 +274,17 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     };
   }, [dailyData, getFormattedTime]);
 
+  const clearCurrentSession = useCallback(() => {
+    try {
+      storage.remove(APP_CONSTANTS.TIME_TRACKING.SESSION_STORAGE_KEY);
+      setCurrentSession(null);
+      setIsTracking(false);
+      logger.info('Current session cleared manually');
+    } catch (error) {
+      logger.error('Failed to clear current session:', error);
+    }
+  }, []);
+
   return {
     currentSession,
     dailyData,
@@ -248,6 +295,7 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     addScreenshotToSession,
     getFormattedTime,
     getWeeklyStats,
-    getTodayData
+    getTodayData,
+    clearCurrentSession
   };
 };

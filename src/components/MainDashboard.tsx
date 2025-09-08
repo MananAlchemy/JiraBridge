@@ -38,7 +38,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     stopTracking,
     addScreenshotToSession,
     getFormattedTime,
-    getWeeklyStats
+    getWeeklyStats,
+    clearCurrentSession
   } = useTimeTracking(selectedTask);
 
   const {
@@ -136,11 +137,15 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
   const weeklyStats = getWeeklyStats();
 
   const handleStartStopTracking = () => {
+    console.log('handleStartStopTracking called:', { isTracking, hasCurrentSession: !!currentSession, hasSelectedTask: !!selectedTask });
+    
     if (isTracking) {
       // Show work log modal when stopping tracking
       if (currentSession && selectedTask) {
         const now = new Date();
         const timeSpentSeconds = Math.floor((now.getTime() - currentSession.startTime.getTime()) / 1000);
+        
+        console.log('Stopping tracking with work log modal:', { timeSpentSeconds });
         
         setPendingSession({
           startTime: currentSession.startTime,
@@ -149,9 +154,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
         });
         setShowWorkLogModal(true);
       } else {
+        console.log('Stopping tracking without work log modal');
         stopTracking();
       }
     } else {
+      console.log('Starting tracking');
       startTracking();
     }
   };
@@ -164,10 +171,19 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     timeSpentSeconds: number;
   }) => {
     if (!jiraConfig?.userKey) {
-      throw new Error('Jira user key not found. Please reconnect to Jira.');
+      throw new Error('Jira user key not found. Please reconnect to Jira to get your user key.');
     }
 
-    await logWorkToTempo(workLogData, jiraConfig.userKey);
+    try {
+      await logWorkToTempo(workLogData, jiraConfig.userKey);
+    } catch (error) {
+      console.error('Work log submission error:', error);
+      // Re-throw with more context
+      if (error instanceof Error) {
+        throw new Error(`Failed to log work to Tempo: ${error.message}`);
+      }
+      throw error;
+    }
   };
 
   const handleStatusChange = async (taskKey: string, newStatus: string) => {
@@ -288,6 +304,32 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
                   </>
                 )}
               </button>
+              
+              {/* Debug: Clear session button - only show if there's a current session */}
+              {currentSession && (
+                <button
+                  onClick={clearCurrentSession}
+                  className="w-full text-gray-600 bg-gray-100 hover:bg-gray-200 py-1 px-3 rounded text-sm transition-colors"
+                  title="Clear current session (debug)"
+                >
+                  Clear Session
+                </button>
+              )}
+              
+              {/* Debug: DevTools button - only show in development */}
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={async () => {
+                    if (window.electronAPI?.toggleDevTools) {
+                      await window.electronAPI.toggleDevTools();
+                    }
+                  }}
+                  className="w-full text-blue-600 bg-blue-50 hover:bg-blue-100 py-1 px-3 rounded text-sm transition-colors"
+                  title="Toggle DevTools (F12)"
+                >
+                  Toggle DevTools (F12)
+                </button>
+              )}
             </div>
 
             {/* Weekly Stats Section */}

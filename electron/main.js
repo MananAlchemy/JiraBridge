@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, screen, autoUpdater } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, screen, autoUpdater, globalShortcut } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -25,7 +25,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: true // Enable devtools
     },
     show: false // Don't show until ready
   });
@@ -58,6 +59,39 @@ function createWindow() {
     require('electron').shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // Handle F12 key for devtools in development
+  if (isDev) {
+    // Method 1: Global shortcut (more reliable)
+    globalShortcut.register('F12', () => {
+      logger.info('F12 pressed - toggling devtools');
+      if (mainWindow && mainWindow.webContents) {
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+          logger.info('DevTools closed');
+        } else {
+          mainWindow.webContents.openDevTools();
+          logger.info('DevTools opened');
+        }
+      }
+    });
+
+    // Method 2: before-input-event (backup)
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      logger.debug('Key pressed:', input.key, input.type);
+      if (input.key === 'F12' && input.type === 'keyDown') {
+        logger.info('F12 detected via before-input-event');
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        } else {
+          mainWindow.webContents.openDevTools();
+        }
+      }
+    });
+
+    // Method 3: Add to menu for easy access
+    logger.info('F12 devtools shortcut registered');
+  }
 }
 
 function createMenu() {
@@ -101,7 +135,10 @@ function createMenu() {
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        { 
+          role: 'toggleDevTools',
+          accelerator: 'F12'
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -118,6 +155,48 @@ function createMenu() {
       ]
     }
   ];
+
+  // Add development menu in development mode
+  if (isDev) {
+    template.push({
+      label: 'Development',
+      submenu: [
+        {
+          label: 'Toggle DevTools',
+          accelerator: 'F12',
+          click: () => {
+            if (mainWindow) {
+              if (mainWindow.webContents.isDevToolsOpened()) {
+                mainWindow.webContents.closeDevTools();
+                logger.info('DevTools closed via menu');
+              } else {
+                mainWindow.webContents.openDevTools();
+                logger.info('DevTools opened via menu');
+              }
+            }
+          }
+        },
+        {
+          label: 'Reload App',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.reload();
+            }
+          }
+        },
+        {
+          label: 'Force Reload',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.reloadIgnoringCache();
+            }
+          }
+        }
+      ]
+    });
+  }
 
   // macOS specific menu adjustments
   if (process.platform === 'darwin') {
@@ -222,6 +301,66 @@ ipcMain.handle('open-auth-url', async () => {
   const authUrl = 'https://jirabridge.alchemytech.in/?from=electron';
   logger.info('Opening auth URL:', authUrl);
   await shell.openExternal(authUrl);
+});
+
+// Development IPC handlers
+ipcMain.handle('toggle-devtools', () => {
+  if (mainWindow && isDev) {
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools();
+      logger.info('DevTools closed via IPC');
+    } else {
+      mainWindow.webContents.openDevTools();
+      logger.info('DevTools opened via IPC');
+    }
+  }
+});
+
+ipcMain.handle('is-devtools-open', () => {
+  return mainWindow ? mainWindow.webContents.isDevToolsOpened() : false;
+});
+
+// IPC handler for making HTTP requests (for Tempo API)
+ipcMain.handle('proxy-http-request', async (event, requestData) => {
+  try {
+    const { method, url, headers, body } = requestData;
+    
+    logger.info('Making HTTP request via IPC:', { method, url, hasBody: !!body });
+    
+    // Use CommonJS require for node-fetch v2
+    const fetch = require('node-fetch');
+    
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Atlassian-Token': 'no-check', // Disable XSRF check
+        'X-Requested-With': 'XMLHttpRequest', // Indicate AJAX request
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const responseText = await response.text();
+    
+    logger.info('HTTP response received:', { 
+      status: response.status, 
+      statusText: response.statusText,
+      hasBody: !!responseText 
+    });
+
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      body: responseText,
+      ok: response.ok
+    };
+  } catch (error) {
+    logger.error('HTTP request failed:', error);
+    throw error;
+  }
 });
 
 
@@ -427,6 +566,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     logger.info('All windows closed, quitting application');
     app.quit();
+  }
+});
+
+// Cleanup global shortcuts when app is quitting
+app.on('will-quit', () => {
+  if (isDev) {
+    globalShortcut.unregisterAll();
+    logger.info('Global shortcuts unregistered');
   }
 });
 

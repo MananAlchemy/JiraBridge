@@ -3,6 +3,25 @@ export interface ElectronAPI {
   getScreenInfo: () => Promise<ScreenInfoResult>;
   onCaptureScreenshot: (callback: () => void) => void;
   onOpenSettings: (callback: () => void) => void;
+  
+  // Development functionality
+  toggleDevTools: () => Promise<void>;
+  isDevToolsOpen: () => Promise<boolean>;
+  
+  // HTTP proxy functionality
+  proxyHttpRequest: (requestData: {
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: any;
+  }) => Promise<{
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: string;
+    ok: boolean;
+  }>;
+  
   removeAllListeners: (channel: string) => void;
 }
 

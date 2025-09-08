@@ -13,7 +13,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { JiraTask } from '../services/jira.service';
-import { JIRA_CONFIG, JIRA_ERRORS, JIRA_SUCCESS, TASK_STATUS_TRANSITIONS } from '../constants/jira';
+import { TASK_STATUS_TRANSITIONS } from '../constants/jira';
 import { JiraError } from '../utils/errorHandler';
 
 interface WorkLogModalProps {
@@ -61,6 +61,7 @@ export const WorkLogModal: React.FC<WorkLogModalProps> = ({
   const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   // Format time duration
   const formatDuration = (seconds: number): string => {
@@ -113,6 +114,38 @@ export const WorkLogModal: React.FC<WorkLogModalProps> = ({
     }
   };
 
+  // Test connection and permissions
+  const testConnection = async () => {
+    if (!task) return;
+    
+    setIsTestingConnection(true);
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      const { jiraService } = await import('../services/jira.service');
+      
+      // Test basic Jira connection first
+      await jiraService.getTaskDetails(task.key);
+      setSuccess('Basic Jira connection successful!');
+      
+      // Test Tempo connection specifically
+      const tempoTest = await jiraService.testTempoConnection();
+      if (tempoTest.success) {
+        setSuccess('Both Jira and Tempo connections successful! You should be able to log work.');
+      } else {
+        setError(`Jira connection OK, but Tempo failed: ${tempoTest.message}`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof JiraError 
+        ? err.message 
+        : 'Connection test failed. Please check your Jira configuration.';
+      setError(errorMessage);
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,9 +191,23 @@ export const WorkLogModal: React.FC<WorkLogModalProps> = ({
       }, 1500);
 
     } catch (err) {
-      const errorMessage = err instanceof JiraError 
-        ? err.message 
-        : 'Failed to log work. Please try again.';
+      let errorMessage = 'Failed to log work. Please try again.';
+      
+      if (err instanceof JiraError) {
+        errorMessage = err.message;
+        
+        // Provide specific guidance for common permission issues
+        if (err.message.includes('Access denied') || err.message.includes('403')) {
+          errorMessage += '\n\nPossible solutions:\n• Check if you have "Work on Issues" permission for this project\n• Verify your Jira user has Tempo Timesheets access\n• Contact your Jira administrator to review permissions\n• Try logging work directly in Jira to test permissions';
+        } else if (err.message.includes('User key is required')) {
+          errorMessage += '\n\nPlease reconnect to Jira to refresh your user key.';
+        } else if (err.message.includes('Both Tempo and regular Jira worklog failed')) {
+          errorMessage += '\n\nThis indicates a permission issue. Please:\n• Check your Jira permissions\n• Verify you can log work manually in Jira\n• Contact your administrator if the issue persists';
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -329,9 +376,9 @@ export const WorkLogModal: React.FC<WorkLogModalProps> = ({
 
               {/* Error/Success Messages */}
               {error && (
-                <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-sm text-red-700">{error}</span>
+                <div className="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-red-700 whitespace-pre-line">{error}</div>
                 </div>
               )}
 
@@ -343,32 +390,52 @@ export const WorkLogModal: React.FC<WorkLogModalProps> = ({
               )}
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  disabled={isSubmitting}
+                  onClick={testConnection}
+                  disabled={isTestingConnection || isSubmitting}
+                  className="px-4 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center space-x-2"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !description.trim()}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
-                >
-                  {isSubmitting ? (
+                  {isTestingConnection ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Logging Work...</span>
+                      <span>Testing...</span>
                     </>
                   ) : (
                     <>
-                      <Save className="w-4 h-4" />
-                      <span>Log Work & Update Status</span>
+                      <span>Test Connection</span>
                     </>
                   )}
                 </button>
+                
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !description.trim()}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Logging Work...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Log Work & Update Status</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

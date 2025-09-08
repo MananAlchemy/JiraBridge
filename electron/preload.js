@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenSettings: (callback) => ipcRenderer.on('open-settings', callback),
   onToggleTracking: (callback) => ipcRenderer.on('toggle-tracking', callback),
   
+  // Development functionality
+  toggleDevTools: () => ipcRenderer.invoke('toggle-devtools'),
+  isDevToolsOpen: () => ipcRenderer.invoke('is-devtools-open'),
+  
+  // HTTP proxy functionality
+  proxyHttpRequest: (requestData) => ipcRenderer.invoke('proxy-http-request', requestData),
+  
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });

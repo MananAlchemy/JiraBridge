@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "Professional screenshot management desktop application",
+  "author": "MananAlchemy",
   "main": "electron/main.js",
   "homepage": "./",
   "protocols": [
@@ -32,6 +33,7 @@
   "dependencies": {
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.344.0",
+    "node-fetch": "^2.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -110,8 +112,7 @@
             "ia32"
           ]
         }
-      ],
-      "publisherName": "Your Company Name"
+      ]
     },
     "linux": {
       "target": [

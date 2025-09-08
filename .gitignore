@@ -68,6 +68,19 @@ out/
 app/
 release/
 
+# Distribution files
+JiraBridge-Distribution/
+dist-electron/
+*.dmg
+*.zip
+*.AppImage
+*.exe
+*.deb
+*.rpm
+*.tar.gz
+*.blockmap
+*.yml
+
 # Temporary folders
 tmp/
 temp/

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron';
+import { BrowserWindow, app, shell, globalShortcut } from 'electron';
 import path from 'path';
 import { APP_CONFIG, APP_CONSTANTS } from '../config/app.config';
 import { logger } from '../utils/logger';
@@ -25,6 +25,7 @@ export class WindowManager {
         contextIsolation: true,
         enableRemoteModule: false,
         preload: path.join(__dirname, 'preload.js'),
+        devTools: true, // Enable devtools
       },
       titleBarStyle: 'hiddenInset', // macOS style title bar
       show: false, // Don't show until ready
@@ -72,6 +73,41 @@ export class WindowManager {
         shell.openExternal(navigationUrl);
       }
     });
+
+    // Handle F12 key for devtools in development
+    if (this.isDev) {
+      // Method 1: Global shortcut (more reliable)
+      try {
+        globalShortcut.register('F12', () => {
+          logger.info('F12 pressed - toggling devtools');
+          if (this.mainWindow && this.mainWindow.webContents) {
+            if (this.mainWindow.webContents.isDevToolsOpened()) {
+              this.mainWindow.webContents.closeDevTools();
+              logger.info('DevTools closed');
+            } else {
+              this.mainWindow.webContents.openDevTools();
+              logger.info('DevTools opened');
+            }
+          }
+        });
+        logger.info('F12 devtools shortcut registered');
+      } catch (error) {
+        logger.warn('Failed to register F12 shortcut:', error);
+      }
+
+      // Method 2: before-input-event (backup)
+      this.mainWindow.webContents.on('before-input-event', (event, input) => {
+        logger.debug('Key pressed:', input.key, input.type);
+        if (input.key === 'F12' && input.type === 'keyDown') {
+          logger.info('F12 detected via before-input-event');
+          if (this.mainWindow?.webContents.isDevToolsOpened()) {
+            this.mainWindow.webContents.closeDevTools();
+          } else {
+            this.mainWindow?.webContents.openDevTools();
+          }
+        }
+      });
+    }
   }
 
   private async loadWindowContent(): Promise<void> {
@@ -135,6 +171,17 @@ export class WindowManager {
         this.mainWindow.maximize();
       }
       logger.info('Main window toggled maximize');
+    }
+  }
+
+  cleanup(): void {
+    if (this.isDev) {
+      try {
+        globalShortcut.unregisterAll();
+        logger.info('Global shortcuts unregistered');
+      } catch (error) {
+        logger.warn('Failed to unregister global shortcuts:', error);
+      }
     }
   }
 }
