@@ -11,6 +11,30 @@ A professional desktop screenshot management application built with React, TypeS
 - **Settings Management**: Configurable screenshot intervals, quality, and preferences
 - **Modern UI**: Beautiful interface built with Tailwind CSS
 - **Cross-Platform**: Supports macOS, Windows, and Linux
+- **Jira Integration**: Time tracking and work logging with Tempo Timesheets
+
+## ⚙️ Environment Setup
+
+Before running the application, you need to set up environment variables:
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and add your Jira configuration:
+   ```bash
+   # Required: Your Jira admin token for Tempo API access
+   REACT_APP_JIRA_ADMIN_TOKEN=your_actual_token_here
+   
+   # Optional: Jira URL (defaults to https://jira.alchemytech.in)
+   REACT_APP_JIRA_URL=https://your-jira-instance.com
+   
+   # Optional: Debug mode
+   REACT_APP_DEBUG_JIRA=false
+   ```
+
+**Important**: Never commit your `.env` file to version control. It contains sensitive information.
 
 ## 🏗️ Architecture
 
