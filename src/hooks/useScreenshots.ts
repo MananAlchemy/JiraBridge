@@ -6,6 +6,7 @@ import { storage } from '../utils/storage';
 import { logger } from '../utils/logger';
 import { formatUtils } from '../utils/format';
 import { APP_CONSTANTS } from '../constants';
+import { useFirestore } from './useFirestore';
 
 export const useScreenshots = (
   onScreenshotCaptured?: (screenshotId: string) => void,
@@ -19,6 +20,8 @@ export const useScreenshots = (
   const [lastCapture, setLastCapture] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
+  
+  const { storeScreenshotTimeTracking } = useFirestore();
 
   useEffect(() => {
     loadScreenshots();
@@ -334,6 +337,26 @@ export const useScreenshots = (
       setLastCapture(new Date());
       saveScreenshots(updatedScreenshots);
       
+      // Store screenshot time tracking data in Firestore if user is authenticated
+      if (userEmail) {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+        const timeSpentSeconds = 1; // Assuming 1 second per screenshot capture
+        
+        await storeScreenshotTimeTracking({
+          userEmail,
+          date: today,
+          screenshotId: newScreenshot.id,
+          timestamp: newScreenshot.timestamp,
+          timeSpentSeconds,
+          timeSpentFormatted: '1s',
+          jiraTaskKey: jiraTask?.key,
+          jiraTaskSummary: jiraTask?.summary,
+          screenshotSize: newScreenshot.size,
+          screenshotQuality: newScreenshot.quality,
+          synced: newScreenshot.synced,
+        });
+      }
+      
       // Notify time tracking about new screenshot
       if (onScreenshotCaptured) {
         onScreenshotCaptured(newScreenshot.id);
@@ -395,7 +418,7 @@ export const useScreenshots = (
     } finally {
       setIsCapturing(false);
     }
-  }, [screenshots, generateMockScreenshot, generateScreenshotFilename, saveScreenshots, uploadScreenshotToS3]);
+  }, [screenshots, generateMockScreenshot, generateScreenshotFilename, saveScreenshots, uploadScreenshotToS3, userEmail, jiraTask, storeScreenshotTimeTracking]);
 
   const deleteScreenshot = useCallback((id: string) => {
     try {

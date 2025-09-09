@@ -5,11 +5,22 @@ import { logger } from '../utils/logger';
 import { formatUtils } from '../utils/format';
 import { APP_CONSTANTS } from '../constants';
 import { JiraTask } from '../services/jira.service';
+import { useFirestore } from './useFirestore';
+import { useAuth } from './useAuth';
 
 export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
   const [currentSession, setCurrentSession] = useState<TimeTrackingSession | null>(null);
   const [dailyData, setDailyData] = useState<DailyTimeTracking[]>([]);
   const [isTracking, setIsTracking] = useState(false);
+  
+  const { user } = useAuth();
+  const { 
+    storeDailyTimeTracking, 
+    storeTimeTrackingSession, 
+    updateTimeTrackingSession,
+    updateDailyTimeTracking,
+    storeUserProfile 
+  } = useFirestore();
 
   useEffect(() => {
     loadTimeTrackingData();
@@ -25,6 +36,42 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       return () => clearInterval(interval);
     }
   }, [isTracking, currentSession]);
+
+  // Minute-based Firestore updates
+  useEffect(() => {
+    if (isTracking && currentSession && user?.email) {
+      const minuteInterval = setInterval(async () => {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+        const now = new Date();
+        const sessionDuration = Math.floor((now.getTime() - currentSession.startTime.getTime()) / 1000);
+        
+        // Update session in Firestore
+        await updateTimeTrackingSession(user.email, today, currentSession.id, {
+          durationSeconds: sessionDuration,
+          durationFormatted: getFormattedTime(sessionDuration * 1000),
+        });
+
+        // Update daily time tracking (add 60 seconds for the minute that passed)
+        await updateDailyTimeTracking(
+          user.email, 
+          today, 
+          60, // 1 minute = 60 seconds
+          selectedJiraTask?.key,
+          selectedJiraTask?.summary,
+          selectedJiraTask?.project.name
+        );
+
+        logger.info('Minute-based Firestore update completed', { 
+          userEmail: user.email, 
+          date: today, 
+          sessionId: currentSession.id,
+          additionalTime: 60 
+        });
+      }, 60000); // Update every minute (60 seconds)
+
+      return () => clearInterval(minuteInterval);
+    }
+  }, [isTracking, currentSession, user, selectedJiraTask, updateTimeTrackingSession, updateDailyTimeTracking]);
 
   const saveTimeTrackingData = useCallback((data: DailyTimeTracking[]) => {
     try {
@@ -131,10 +178,11 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     }
   }, [currentSession]);
 
-  const startTracking = useCallback(() => {
+  const startTracking = useCallback(async () => {
     try {
       const sessionId = formatUtils.generateId();
       const now = new Date();
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
       
       const newSession: TimeTrackingSession = {
         id: sessionId,
@@ -152,6 +200,22 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       setIsTracking(true);
       saveCurrentSession(newSession);
       
+      // Store session in Firestore if user is authenticated
+      if (user?.email) {
+        await storeTimeTrackingSession(user.email, today, sessionId, {
+          sessionId,
+          startTime: now,
+          durationSeconds: 0,
+          durationFormatted: '0s',
+          isActive: true,
+          jiraTaskKey: selectedJiraTask?.key,
+          jiraTaskSummary: selectedJiraTask?.summary,
+          jiraProject: selectedJiraTask?.project.name,
+          screenshotIds: [],
+          lastUpdated: now,
+        });
+      }
+      
       logger.info('Time tracking started:', { 
         sessionId, 
         jiraTask: selectedJiraTask?.key 
@@ -159,14 +223,15 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     } catch (error) {
       logger.error('Failed to start time tracking:', error);
     }
-  }, [saveCurrentSession, selectedJiraTask]);
+  }, [saveCurrentSession, selectedJiraTask, user, storeTimeTrackingSession]);
 
-  const stopTracking = useCallback(() => {
+  const stopTracking = useCallback(async () => {
     try {
       if (!currentSession) return;
 
       const now = new Date();
       const duration = now.getTime() - currentSession.startTime.getTime();
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
       
       const completedSession: TimeTrackingSession = {
         ...currentSession,
@@ -175,17 +240,27 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
         isActive: false
       };
 
+      // Update session in Firestore if user is authenticated
+      if (user?.email) {
+        await updateTimeTrackingSession(user.email, today, currentSession.id, {
+          endTime: now,
+          durationSeconds: Math.floor(duration / 1000),
+          durationFormatted: getFormattedTime(duration),
+          isActive: false,
+        });
+      }
+
       // Update daily data
-      const today = getTodayData();
+      const todayData = getTodayData();
       const updatedToday = {
-        ...today,
-        totalTime: today.totalTime + duration,
-        sessions: [...today.sessions.filter(s => s.id !== currentSession.id), completedSession],
-        screenshotCount: today.screenshotCount + completedSession.screenshots.length
+        ...todayData,
+        totalTime: todayData.totalTime + duration,
+        sessions: [...todayData.sessions.filter(s => s.id !== currentSession.id), completedSession],
+        screenshotCount: todayData.screenshotCount + completedSession.screenshots.length
       };
 
       const updatedDailyData = [
-        ...dailyData.filter(d => d.date !== today.date),
+        ...dailyData.filter(d => d.date !== todayData.date),
         updatedToday
       ];
 
@@ -196,6 +271,28 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
       saveTimeTrackingData(updatedDailyData);
       saveCurrentSession(null);
       
+      // Store daily data in Firestore if user is authenticated
+      if (user?.email) {
+        await storeDailyTimeTracking(user.email, today, {
+          totalTimeSeconds: Math.floor(updatedToday.totalTime / 1000),
+          totalTimeFormatted: getFormattedTime(updatedToday.totalTime),
+          sessionCount: updatedToday.sessions.length,
+          screenshotCount: updatedToday.screenshotCount,
+          lastUpdated: now,
+          tasks: selectedJiraTask ? {
+            [selectedJiraTask.key]: {
+              taskSummary: selectedJiraTask.summary,
+              project: selectedJiraTask.project.name,
+              timeSpentSeconds: Math.floor(duration / 1000),
+              timeSpentFormatted: getFormattedTime(duration),
+              sessionCount: 1,
+              screenshotCount: completedSession.screenshots.length,
+              lastUpdated: now,
+            }
+          } : {},
+        });
+      }
+      
       logger.info('Time tracking stopped:', { 
         sessionId: currentSession.id, 
         duration: Math.round(duration / 1000) + 's' 
@@ -203,7 +300,7 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     } catch (error) {
       logger.error('Failed to stop time tracking:', error);
     }
-  }, [currentSession, dailyData, getTodayData, saveTimeTrackingData, saveCurrentSession]);
+  }, [currentSession, dailyData, getTodayData, saveTimeTrackingData, saveCurrentSession, user, updateTimeTrackingSession, storeDailyTimeTracking]);
 
   const addScreenshotToSession = useCallback((screenshotId: string) => {
     if (currentSession && currentSession.isActive) {

@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getRemoteConfig, fetchAndActivate, getValue, RemoteConfig } from 'firebase/remote-config';
+import { getFirestore, collection, doc, setDoc, getDoc, addDoc, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
 import { logger } from '../utils/logger';
 import { APP_CONSTANTS } from '../constants';
 
@@ -19,6 +20,9 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Remote Config
 const remoteConfig = getRemoteConfig(app);
+
+// Initialize Firestore
+const db = getFirestore(app);
 
 // Configure Remote Config settings
 remoteConfig.settings = {
@@ -236,3 +240,6 @@ export class FirebaseService {
 
 // Export singleton instance
 export const firebaseService = FirebaseService.getInstance();
+
+// Export Firestore instance for other services
+export { db };
