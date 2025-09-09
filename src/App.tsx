@@ -51,18 +51,25 @@ function App() {
   const [screenshotsData, setScreenshotsData] = useState({
     screenshots: [] as any[],
     unsyncedCount: 0,
+    failedUploadsCount: 0,
     isSyncing: false
   });
 
-  const handleScreenshotsUpdate = (data: { screenshots: any[]; unsyncedCount: number; isSyncing: boolean }) => {
+  const handleScreenshotsUpdate = (data: { screenshots: any[]; unsyncedCount: number; failedUploadsCount: number; isSyncing: boolean }) => {
     setScreenshotsData(data);
   };
 
   const [syncTrigger, setSyncTrigger] = useState(0);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   const handleSync = async () => {
     // Trigger sync by updating the trigger state
     setSyncTrigger(prev => prev + 1);
+  };
+
+  const handleRetryFailedUploads = async () => {
+    // Trigger retry by updating the retry trigger state
+    setRetryTrigger(prev => prev + 1);
   };
 
   useEffect(() => {
@@ -74,6 +81,30 @@ function App() {
 
     // Load settings from storage
     loadSettings();
+
+    // Get and log machine ID
+    const logMachineId = async () => {
+      try {
+        if (window.electronAPI && window.electronAPI.getMachineId) {
+          const result = await window.electronAPI.getMachineId();
+          if (result.success) {
+            console.log('🖥️  Machine ID:', result.machineId);
+            logger.info('Machine ID retrieved:', result.machineId);
+          } else {
+            console.error('❌ Failed to get machine ID:', result.error);
+            logger.error('Failed to get machine ID:', result.error);
+          }
+        } else {
+          console.log('🖥️  Running in web mode - machine ID not available');
+          logger.info('Running in web mode - machine ID not available');
+        }
+      } catch (error) {
+        console.error('❌ Error getting machine ID:', error);
+        logger.error('Error getting machine ID:', error);
+      }
+    };
+
+    logMachineId();
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -128,6 +159,7 @@ function App() {
             onTimeTrackingUpdate={setTimeTrackingData}
             onScreenshotsUpdate={handleScreenshotsUpdate}
             syncTrigger={syncTrigger}
+            retryTrigger={retryTrigger}
           />
         </div>
         
@@ -140,9 +172,11 @@ function App() {
           totalTimeToday={timeTrackingData.totalTimeToday}
           screenshots={screenshotsData.screenshots}
           unsyncedCount={screenshotsData.unsyncedCount}
+          failedUploadsCount={screenshotsData.failedUploadsCount}
           isSyncing={screenshotsData.isSyncing}
           onSignOut={signOut}
           onSync={handleSync}
+          onRetryFailedUploads={handleRetryFailedUploads}
         />
 
         {updateAvailable && updateInfo && (

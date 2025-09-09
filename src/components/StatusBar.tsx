@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wifi, WifiOff, Camera, Clock, User, Image, RefreshCw, HardDrive } from 'lucide-react';
+import { Wifi, WifiOff, Camera, Clock, User, Image, RefreshCw, HardDrive, AlertCircle, CheckCircle } from 'lucide-react';
 import { User as UserType, Screenshot } from '../types';
 
 interface StatusBarProps {
@@ -11,9 +11,11 @@ interface StatusBarProps {
   totalTimeToday?: string;
   screenshots: Screenshot[];
   unsyncedCount: number;
+  failedUploadsCount: number;
   isSyncing: boolean;
   onSignOut: () => void;
   onSync: () => void;
+  onRetryFailedUploads?: () => void;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -25,9 +27,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   totalTimeToday = '0s',
   screenshots,
   unsyncedCount,
+  failedUploadsCount,
   isSyncing,
   onSignOut,
-  onSync
+  onSync,
+  onRetryFailedUploads
 }) => {
   const formatLastCapture = (date: Date | null) => {
     if (!date) return 'Never';
@@ -94,6 +98,34 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             Size: {formatFileSize(screenshots.reduce((sum, s) => sum + s.size, 0))}
           </span>
         </div>
+
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <span className="text-sm text-gray-600">
+              Synced: {screenshots.filter(s => s.synced).length}
+            </span>
+          </div>
+        </div>
+
+        {failedUploadsCount > 0 && (
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm text-red-600">
+                Failed: {failedUploadsCount}
+              </span>
+            </div>
+            {onRetryFailedUploads && (
+              <button
+                onClick={onRetryFailedUploads}
+                className="text-sm text-red-600 hover:text-red-800 transition-colors"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center space-x-2">
           <button

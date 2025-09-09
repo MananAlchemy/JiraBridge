@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Cloud, CloudOff, Download, Tag, Eye, Grid3X3, ChevronRight } from 'lucide-react';
+import { Trash2, Cloud, CloudOff, Download, Tag, Eye, Grid3X3, ChevronRight, AlertCircle, CheckCircle } from 'lucide-react';
 import { Screenshot } from '../types';
 import { formatUtils } from '../utils/format';
 import { logger } from '../utils/logger';
@@ -97,9 +97,11 @@ export const ScreenshotGrid: React.FC<ScreenshotGridProps> = ({
               </span>
               <div className="flex items-center space-x-1">
                 {screenshot.synced ? (
-                  <Cloud className="w-3 h-3 text-green-500" title="Synced" />
+                  <CheckCircle className="w-3 h-3 text-green-500" title="Synced to S3" />
+                ) : screenshot.uploadError ? (
+                  <AlertCircle className="w-3 h-3 text-red-500" title={`Upload failed: ${screenshot.uploadError}`} />
                 ) : (
-                  <CloudOff className="w-3 h-3 text-gray-400" title="Not synced" />
+                  <CloudOff className="w-3 h-3 text-yellow-500" title="Uploading..." />
                 )}
                 <button
                   onClick={(e) => handleDelete(screenshot.id, e)}

@@ -22,6 +22,13 @@ export interface ElectronAPI {
     ok: boolean;
   }>;
   
+  // Machine ID functionality
+  getMachineId: () => Promise<{
+    success: boolean;
+    machineId?: string;
+    error?: string;
+  }>;
+  
   removeAllListeners: (channel: string) => void;
 }
 

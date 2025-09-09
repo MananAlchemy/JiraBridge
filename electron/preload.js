@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // HTTP proxy functionality
   proxyHttpRequest: (requestData) => ipcRenderer.invoke('proxy-http-request', requestData),
   
+  // Machine ID functionality
+  getMachineId: () => ipcRenderer.invoke('get-machine-id'),
+  
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });

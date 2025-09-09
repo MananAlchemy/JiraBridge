@@ -16,11 +16,12 @@ interface MainDashboardProps {
   onSettingsClick: () => void;
   settings: AppSettings;
   onTimeTrackingUpdate?: (data: { isTracking: boolean; totalTimeToday: string; lastCapture: Date | null; isCapturing: boolean }) => void;
-  onScreenshotsUpdate?: (data: { screenshots: any[]; unsyncedCount: number; isSyncing: boolean }) => void;
+  onScreenshotsUpdate?: (data: { screenshots: any[]; unsyncedCount: number; failedUploadsCount: number; isSyncing: boolean }) => void;
   syncTrigger?: number;
+  retryTrigger?: number;
 }
 
-export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate, onScreenshotsUpdate, syncTrigger }) => {
+export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, settings, onTimeTrackingUpdate, onScreenshotsUpdate, syncTrigger, retryTrigger }) => {
   const { user } = useAuth();
   const { 
     config: jiraConfig,
@@ -48,8 +49,15 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     lastCapture,
     captureScreenshot,
     deleteScreenshot,
-    syncScreenshots
-  } = useScreenshots(addScreenshotToSession);
+    syncScreenshots,
+    retryFailedUploads,
+    getScreenshotStats
+  } = useScreenshots(
+    addScreenshotToSession,
+    user?.email,
+    '4d07e62f7c9f7822f3a76f9ad1c085bc', // Machine ID from logs
+    selectedTask?.key
+  );
 
   const [nextCapture, setNextCapture] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -104,6 +112,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
   };
 
   const unsyncedCount = screenshots.filter(s => !s.synced).length;
+  const failedUploadsCount = screenshots.filter(s => !s.synced && s.uploadError).length;
 
   // Update parent component with time tracking data
   useEffect(() => {
@@ -123,10 +132,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
       onScreenshotsUpdate({
         screenshots,
         unsyncedCount,
+        failedUploadsCount,
         isSyncing
       });
     }
-  }, [screenshots, unsyncedCount, isSyncing, onScreenshotsUpdate]);
+  }, [screenshots, unsyncedCount, failedUploadsCount, isSyncing, onScreenshotsUpdate]);
 
   // Handle sync trigger from StatusBar
   useEffect(() => {
@@ -134,6 +144,19 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
       handleSync();
     }
   }, [syncTrigger]);
+
+  // Handle retry trigger from StatusBar
+  useEffect(() => {
+    if (retryTrigger && retryTrigger > 0) {
+      handleRetryFailedUploads();
+    }
+  }, [retryTrigger]);
+
+  const handleRetryFailedUploads = async () => {
+    setIsSyncing(true);
+    await retryFailedUploads();
+    setIsSyncing(false);
+  };
   const weeklyStats = getWeeklyStats();
 
   const handleStartStopTracking = () => {

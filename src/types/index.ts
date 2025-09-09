@@ -20,6 +20,9 @@ export interface Screenshot {
   displayId?: number; // Which display was captured
   tags?: string[];
   description?: string;
+  s3Url?: string; // S3 URL if uploaded
+  s3Key?: string; // S3 key for the uploaded file
+  uploadError?: string; // Error message if upload failed
 }
 
 export interface UpdateInfo {
@@ -130,4 +133,10 @@ export interface ExportOptions {
   quality: number; // 0-100
   includeMetadata: boolean;
   compressionLevel: number; // 0-9
+}
+
+export interface MachineIdResult {
+  success: boolean;
+  machineId?: string;
+  error?: string;
 }

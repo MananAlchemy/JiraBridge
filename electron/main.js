@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, screen, autoUpdater, globalShortcut } = require('electron');
 const path = require('path');
+const machineId = require('machine-id');
 const isDev = process.env.NODE_ENV === 'development';
 
 // Simple logger for now
@@ -321,6 +322,18 @@ ipcMain.handle('is-devtools-open', () => {
   return mainWindow ? mainWindow.webContents.isDevToolsOpened() : false;
 });
 
+// IPC handler for getting machine ID
+ipcMain.handle('get-machine-id', async () => {
+  try {
+    const id = machineId();
+    logger.info('Machine ID requested via IPC:', id);
+    return { success: true, machineId: id };
+  } catch (error) {
+    logger.error('Failed to get machine ID via IPC:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 // IPC handler for making HTTP requests (for Tempo API)
 ipcMain.handle('proxy-http-request', async (event, requestData) => {
   try {
@@ -552,6 +565,16 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 // App event handlers
 app.whenReady().then(() => {
   logger.info('App ready, initializing...');
+  
+  // Get and log machine ID
+  try {
+    const id = machineId();
+    logger.info('Machine ID:', id);
+    console.log('🖥️  Machine ID:', id);
+  } catch (error) {
+    logger.error('Failed to get machine ID:', error.message);
+  }
+  
   createWindow();
   createMenu();
   setupAutoUpdater();
