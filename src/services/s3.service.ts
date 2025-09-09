@@ -111,15 +111,36 @@ export class S3Service {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Check if it's a network-related error
+      const isNetworkError = errorMessage.includes('network') || 
+                            errorMessage.includes('timeout') || 
+                            errorMessage.includes('ECONNREFUSED') ||
+                            errorMessage.includes('ENOTFOUND') ||
+                            errorMessage.includes('fetch');
+
+      const finalErrorMessage = isNetworkError 
+        ? `Network error: ${errorMessage}` 
+        : errorMessage;
+
+      console.log('❌ S3 Upload Failed:', {
+        screenshotId,
+        filename,
+        error: finalErrorMessage,
+        isNetworkError,
+        s3Key: `${userEmail}/${machineId}/${new Date().toISOString().split('T')[0]}/${jiraKey || 'no-jira-key'}/${filename}`
+      });
+
       logger.error('Failed to upload screenshot to S3:', { 
         screenshotId, 
         filename, 
-        error: errorMessage 
+        error: finalErrorMessage,
+        isNetworkError
       });
 
       return {
         success: false,
-        error: errorMessage,
+        error: finalErrorMessage,
       };
     }
   }

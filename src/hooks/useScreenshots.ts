@@ -17,15 +17,184 @@ export const useScreenshots = (
   const [isCapturing, setIsCapturing] = useState(false);
   const [lastCapture, setLastCapture] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadScreenshots();
     setupElectronEventListeners();
+    setupNetworkListeners();
     
     return () => {
       electronService.cleanupEventListeners();
+      cleanupNetworkListeners();
     };
   }, []);
+
+  const saveScreenshots = useCallback((newScreenshots: Screenshot[]) => {
+    try {
+      storage.set(APP_CONSTANTS.STORAGE_KEYS.SCREENSHOTS, newScreenshots);
+      logger.debug('Screenshots saved to storage:', { count: newScreenshots.length });
+    } catch (error) {
+      logger.error('Failed to save screenshots:', error);
+    }
+  }, []);
+
+  const uploadScreenshotToS3 = useCallback(async (screenshot: Screenshot, userEmail: string, machineId: string, jiraKey?: string): Promise<Screenshot> => {
+    if (!screenshot.dataURL) {
+      logger.warn('No dataURL available for S3 upload:', { id: screenshot.id });
+      return screenshot;
+    }
+
+    try {
+      logger.info('Uploading screenshot to S3:', { id: screenshot.id });
+      const uploadResult = await s3Service.uploadScreenshot(
+        screenshot.id,
+        screenshot.dataURL,
+        screenshot.filename,
+        userEmail,
+        machineId,
+        jiraKey
+      );
+
+      if (uploadResult.success) {
+        logger.info('Screenshot uploaded to S3 successfully:', { 
+          id: screenshot.id, 
+          url: uploadResult.url 
+        });
+        return {
+          ...screenshot,
+          synced: true,
+          s3Url: uploadResult.url,
+          s3Key: uploadResult.key,
+          uploadError: undefined,
+        };
+      } else {
+        logger.error('S3 upload failed:', { 
+          id: screenshot.id, 
+          error: uploadResult.error 
+        });
+        return {
+          ...screenshot,
+          synced: false,
+          uploadError: uploadResult.error,
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('S3 upload error:', { id: screenshot.id, error: errorMessage });
+      return {
+        ...screenshot,
+        synced: false,
+        uploadError: errorMessage,
+      };
+    }
+  }, []);
+
+  const retryFailedUploads = useCallback(async () => {
+    try {
+      logger.info('Retrying failed uploads');
+      const failedUploads = screenshots.filter(s => !s.synced && s.uploadError && s.dataURL);
+      
+      if (failedUploads.length === 0) {
+        logger.info('No failed uploads to retry');
+        return;
+      }
+      
+      logger.info('Found failed uploads to retry:', { count: failedUploads.length });
+      
+      const updatedScreenshots = [...screenshots];
+      
+      for (const screenshot of failedUploads) {
+        try {
+          logger.info('Retrying upload for screenshot:', { id: screenshot.id });
+          if (userEmail && machineId) {
+            const uploadedScreenshot = await uploadScreenshotToS3(screenshot, userEmail, machineId, jiraKey);
+            
+            // Update the screenshot in the array
+            const index = updatedScreenshots.findIndex(s => s.id === screenshot.id);
+            if (index !== -1) {
+              updatedScreenshots[index] = uploadedScreenshot;
+            }
+            
+            logger.debug('Screenshot upload retry completed:', { 
+              id: screenshot.id, 
+              synced: uploadedScreenshot.synced 
+            });
+          }
+        } catch (uploadError) {
+          logger.error('Failed to retry upload for screenshot:', { 
+            id: screenshot.id, 
+            error: uploadError 
+          });
+        }
+      }
+      
+      setScreenshots(updatedScreenshots);
+      saveScreenshots(updatedScreenshots);
+      
+      logger.info('Failed upload retry completed');
+    } catch (error) {
+      logger.error('Failed upload retry failed:', error);
+      setError('Failed to retry uploads');
+    }
+  }, [screenshots, saveScreenshots, uploadScreenshotToS3, userEmail, machineId, jiraKey]);
+
+  const setupNetworkListeners = useCallback(() => {
+    const handleOnline = () => {
+      console.log('🌐 Network connection restored - attempting to sync failed uploads');
+      // Auto-retry failed uploads when connection is restored
+      const failedUploads = screenshots.filter(s => !s.synced && s.uploadError && s.dataURL);
+      if (failedUploads.length > 0 && userEmail && machineId) {
+        console.log(`🔄 Auto-retrying ${failedUploads.length} failed uploads`);
+        retryFailedUploads();
+      }
+    };
+
+    const handleOffline = () => {
+      console.log('📡 Network connection lost - screenshots will be stored locally');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [screenshots, userEmail, machineId, retryFailedUploads]);
+
+  const cleanupNetworkListeners = useCallback(() => {
+    // Cleanup is handled in setupNetworkListeners return function
+  }, []);
+
+  // Setup periodic retry for failed uploads
+  useEffect(() => {
+    const setupPeriodicRetry = () => {
+      // Clear existing interval
+      if (retryInterval) {
+        clearInterval(retryInterval);
+      }
+
+      // Set up new interval to retry failed uploads every 5 minutes
+      const interval = setInterval(() => {
+        const failedUploads = screenshots.filter(s => !s.synced && s.uploadError && s.dataURL);
+        if (failedUploads.length > 0 && userEmail && machineId && navigator.onLine) {
+          console.log(`🔄 Periodic retry: Attempting to sync ${failedUploads.length} failed uploads`);
+          retryFailedUploads();
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
+      setRetryInterval(interval);
+    };
+
+    setupPeriodicRetry();
+
+    return () => {
+      if (retryInterval) {
+        clearInterval(retryInterval);
+      }
+    };
+  }, [screenshots, userEmail, machineId, retryFailedUploads, retryInterval]);
 
   const loadScreenshots = useCallback(() => {
     try {
@@ -42,15 +211,6 @@ export const useScreenshots = (
     } catch (error) {
       logger.error('Failed to load screenshots:', error);
       setError('Failed to load screenshots');
-    }
-  }, []);
-
-  const saveScreenshots = useCallback((newScreenshots: Screenshot[]) => {
-    try {
-      storage.set(APP_CONSTANTS.STORAGE_KEYS.SCREENSHOTS, newScreenshots);
-      logger.debug('Screenshots saved to storage:', { count: newScreenshots.length });
-    } catch (error) {
-      logger.error('Failed to save screenshots:', error);
     }
   }, []);
 
@@ -115,57 +275,6 @@ export const useScreenshots = (
       tags: [],
     };
   }, [generateScreenshotFilename]);
-
-  const uploadScreenshotToS3 = useCallback(async (screenshot: Screenshot, userEmail: string, machineId: string, jiraKey?: string): Promise<Screenshot> => {
-    if (!screenshot.dataURL) {
-      logger.warn('No dataURL available for S3 upload:', { id: screenshot.id });
-      return screenshot;
-    }
-
-    try {
-      logger.info('Uploading screenshot to S3:', { id: screenshot.id });
-      const uploadResult = await s3Service.uploadScreenshot(
-        screenshot.id,
-        screenshot.dataURL,
-        screenshot.filename,
-        userEmail,
-        machineId,
-        jiraKey
-      );
-
-      if (uploadResult.success) {
-        logger.info('Screenshot uploaded to S3 successfully:', { 
-          id: screenshot.id, 
-          url: uploadResult.url 
-        });
-        return {
-          ...screenshot,
-          synced: true,
-          s3Url: uploadResult.url,
-          s3Key: uploadResult.key,
-          uploadError: undefined,
-        };
-      } else {
-        logger.error('S3 upload failed:', { 
-          id: screenshot.id, 
-          error: uploadResult.error 
-        });
-        return {
-          ...screenshot,
-          synced: false,
-          uploadError: uploadResult.error,
-        };
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('S3 upload error:', { id: screenshot.id, error: errorMessage });
-      return {
-        ...screenshot,
-        synced: false,
-        uploadError: errorMessage,
-      };
-    }
-  }, []);
 
   const captureScreenshot = useCallback(async (options?: CaptureOptions) => {
     setIsCapturing(true);
@@ -362,54 +471,6 @@ export const useScreenshots = (
     setError(null);
   }, []);
 
-  const retryFailedUploads = useCallback(async () => {
-    try {
-      logger.info('Retrying failed uploads');
-      const failedUploads = screenshots.filter(s => !s.synced && s.uploadError && s.dataURL);
-      
-      if (failedUploads.length === 0) {
-        logger.info('No failed uploads to retry');
-        return;
-      }
-      
-      logger.info('Found failed uploads to retry:', { count: failedUploads.length });
-      
-      const updatedScreenshots = [...screenshots];
-      
-      for (const screenshot of failedUploads) {
-        try {
-          logger.info('Retrying upload for screenshot:', { id: screenshot.id });
-          if (userEmail && machineId) {
-            const uploadedScreenshot = await uploadScreenshotToS3(screenshot, userEmail, machineId, jiraKey);
-            
-            // Update the screenshot in the array
-            const index = updatedScreenshots.findIndex(s => s.id === screenshot.id);
-            if (index !== -1) {
-              updatedScreenshots[index] = uploadedScreenshot;
-            }
-            
-            logger.debug('Screenshot upload retry completed:', { 
-              id: screenshot.id, 
-              synced: uploadedScreenshot.synced 
-            });
-          }
-        } catch (uploadError) {
-          logger.error('Failed to retry upload for screenshot:', { 
-            id: screenshot.id, 
-            error: uploadError 
-          });
-        }
-      }
-      
-      setScreenshots(updatedScreenshots);
-      saveScreenshots(updatedScreenshots);
-      
-      logger.info('Failed upload retry completed');
-    } catch (error) {
-      logger.error('Failed upload retry failed:', error);
-      setError('Failed to retry uploads');
-    }
-  }, [screenshots, saveScreenshots, uploadScreenshotToS3]);
 
   const getScreenshotStats = useCallback(() => {
     const total = screenshots.length;
