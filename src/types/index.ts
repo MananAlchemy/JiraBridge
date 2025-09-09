@@ -23,6 +23,11 @@ export interface Screenshot {
   s3Url?: string; // S3 URL if uploaded
   s3Key?: string; // S3 key for the uploaded file
   uploadError?: string; // Error message if upload failed
+  jiraTask?: {
+    key: string;
+    summary: string;
+    project: string;
+  };
 }
 
 export interface UpdateInfo {

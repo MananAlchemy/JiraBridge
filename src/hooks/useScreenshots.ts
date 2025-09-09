@@ -11,7 +11,8 @@ export const useScreenshots = (
   onScreenshotCaptured?: (screenshotId: string) => void,
   userEmail?: string,
   machineId?: string,
-  jiraKey?: string
+  jiraKey?: string,
+  jiraTask?: { key: string; summary: string; project: string }
 ) => {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -304,6 +305,7 @@ export const useScreenshots = (
             quality,
             displayId: options?.displayId,
             tags: [],
+            jiraTask: jiraTask,
           };
           
           console.log('📷 Screenshot Captured:', {

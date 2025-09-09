@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, Settings, TrendingUp } from 'lucide-react';
 import { ScreenshotGrid } from './ScreenshotGrid';
-import { TimeTrackingHistory } from './TimeTrackingHistory';
 import JiraConfig from './JiraConfig';
 import TaskSelector from './TaskSelector';
 import { WorkLogModal } from './WorkLogModal';
@@ -56,12 +55,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     addScreenshotToSession,
     user?.email,
     '4d07e62f7c9f7822f3a76f9ad1c085bc', // Machine ID from logs
-    selectedTask?.key
+    selectedTask?.key,
+    selectedTask
   );
 
   const [nextCapture, setNextCapture] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [showWorkLogModal, setShowWorkLogModal] = useState(false);
   const [pendingSession, setPendingSession] = useState<{
     startTime: Date;
@@ -242,7 +241,36 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Time Tracking Box */}
+          {/* Jira Project Box - First */}
+          {user && (
+            <div className="h-96 flex flex-col">
+              <JiraConfig 
+                userEmail={user.email} 
+                onJiraConnected={(config) => connectJira(config!)}
+                onProjectChange={(projectKey) => {
+                  // Clear task selection when project changes
+                  if (selectedTask && selectedTask.project.key !== projectKey) {
+                    selectTask(null);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Jira Task Box - Second */}
+          {user && (
+            <div className="h-96 flex flex-col">
+              <TaskSelector 
+                userEmail={user.email}
+                onTaskSelect={selectTask}
+                selectedTask={selectedTask}
+                isProjectSelected={!!jiraConfig?.project}
+                selectedProject={jiraConfig?.project}
+              />
+            </div>
+          )}
+
+          {/* Time Tracking Box - Third */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-96 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -355,25 +383,17 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               )}
             </div>
 
-            {/* Weekly Stats Section */}
+            {/* Weekly Stats Section - Non-collapsible */}
             <div className="border-t border-gray-100 pt-4 mt-4">
-              <div 
-                className="flex items-center justify-between mb-3 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors"
-                onClick={() => setShowHistory(!showHistory)}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900 text-sm">Weekly Stats</h4>
-                    <p className="text-sm font-bold text-purple-600">
-                      {weeklyStats.formattedTotalTime}
-                    </p>
-                  </div>
+              <div className="flex items-center space-x-3 mb-3">
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-purple-600" />
                 </div>
-                <div className="text-purple-600 text-sm">
-                  {showHistory ? '▼' : '▶'}
+                <div>
+                  <h4 className="font-medium text-gray-900 text-sm">Weekly Stats</h4>
+                  <p className="text-sm font-bold text-purple-600">
+                    {weeklyStats.formattedTotalTime}
+                  </p>
                 </div>
               </div>
               
@@ -388,41 +408,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
                   <span className="font-medium text-gray-900">{weeklyStats.formattedAverageTime}</span>
                 </div>
               </div>
-              
-              <div className="text-xs text-gray-400 mt-2">
-                Click to {showHistory ? 'hide' : 'view'} detailed history
-              </div>
             </div>
           </div>
-
-          {/* Jira Project Box */}
-          {user && (
-            <div className="h-96 flex flex-col">
-              <JiraConfig 
-                userEmail={user.email} 
-                onJiraConnected={(config) => connectJira(config!)}
-                onProjectChange={(projectKey) => {
-                  // Clear task selection when project changes
-                  if (selectedTask && selectedTask.project.key !== projectKey) {
-                    selectTask(null);
-                  }
-                }}
-              />
-            </div>
-          )}
-
-          {/* Jira Task Box */}
-          {user && (
-            <div className="h-96 flex flex-col">
-              <TaskSelector 
-                userEmail={user.email}
-                onTaskSelect={selectTask}
-                selectedTask={selectedTask}
-                isProjectSelected={!!jiraConfig?.project}
-                selectedProject={jiraConfig?.project}
-              />
-            </div>
-          )}
         </div>
 
         {/* Selected Task Display */}
@@ -477,15 +464,6 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
           />
         </div>
 
-        {/* Time Tracking History */}
-        {showHistory && (
-          <div className="mt-8">
-            <TimeTrackingHistory
-              dailyData={dailyData}
-              getFormattedTime={getFormattedTime}
-            />
-          </div>
-        )}
 
         {/* Work Log Modal */}
         {showWorkLogModal && pendingSession && selectedTask && (
