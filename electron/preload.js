@@ -26,6 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Machine ID functionality
   getMachineId: () => ipcRenderer.invoke('get-machine-id'),
   
+  // Update functionality
+  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', callback),
+  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
+  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });

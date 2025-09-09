@@ -291,8 +291,16 @@ ipcMain.handle('check-for-updates', () => {
   }
 });
 
+ipcMain.handle('download-update', () => {
+  if (!isDev) {
+    logger.info('Download update requested via IPC');
+    autoUpdater.downloadUpdate();
+  }
+});
+
 ipcMain.handle('install-update', () => {
   if (!isDev) {
+    logger.info('Install update requested via IPC');
     autoUpdater.quitAndInstall();
   }
 });

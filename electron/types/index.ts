@@ -3,6 +3,7 @@ export interface ElectronAPI {
   getScreenInfo: () => Promise<ScreenInfoResult>;
   onCaptureScreenshot: (callback: () => void) => void;
   onOpenSettings: (callback: () => void) => void;
+  onToggleTracking: (callback: () => void) => void;
   
   // Development functionality
   toggleDevTools: () => Promise<void>;
@@ -28,6 +29,17 @@ export interface ElectronAPI {
     machineId?: string;
     error?: string;
   }>;
+  
+  // Update functionality
+  onUpdateAvailable: (callback: (info: any) => void) => void;
+  onDownloadProgress: (callback: (progress: any) => void) => void;
+  onUpdateDownloaded: (callback: (info: any) => void) => void;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  
+  // Authentication functionality
+  openAuthUrl: () => Promise<void>;
+  onAuthSuccess: (callback: (data: any) => void) => void;
   
   removeAllListeners: (channel: string) => void;
 }

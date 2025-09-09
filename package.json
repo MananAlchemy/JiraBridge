@@ -43,6 +43,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.884.0",
     "@aws-sdk/s3-request-presigner": "^3.884.0",
+    "firebase": "^12.2.1",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.344.0",
     "machine-id": "^1.0.0",
@@ -115,15 +116,13 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         },
         {
           "target": "portable",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         }
       ]

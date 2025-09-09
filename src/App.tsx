@@ -7,6 +7,7 @@ import { StatusBar } from './components/StatusBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { useUpdates } from './hooks/useUpdates';
+import { useFirebaseConfig } from './hooks/useFirebaseConfig';
 import { AppSettings } from './types';
 import { storage } from './utils/storage';
 import { logger } from './utils/logger';
@@ -24,6 +25,7 @@ function App() {
     installUpdate,
     dismissUpdate
   } = useUpdates();
+  const { config: firebaseConfig, isInitialized: firebaseInitialized } = useFirebaseConfig();
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showSettings, setShowSettings] = useState(false);
@@ -71,6 +73,33 @@ function App() {
     // Trigger retry by updating the retry trigger state
     setRetryTrigger(prev => prev + 1);
   };
+
+  // Update settings when Firebase config changes
+  useEffect(() => {
+    if (firebaseInitialized) {
+      setSettings(prevSettings => {
+        const newSettings = {
+          ...prevSettings,
+          screenshotInterval: firebaseConfig.screenshotInterval,
+          screenshotQuality: firebaseConfig.screenshotQuality,
+          maxScreenshots: firebaseConfig.maxScreenshots,
+          autoSync: firebaseConfig.autoSyncEnabled,
+          notifications: firebaseConfig.notificationsEnabled,
+        };
+        
+        // Log when screenshot interval changes
+        if (prevSettings.screenshotInterval !== firebaseConfig.screenshotInterval) {
+          logger.info('Screenshot interval updated from Firebase Remote Config:', {
+            old: prevSettings.screenshotInterval,
+            new: firebaseConfig.screenshotInterval
+          });
+        }
+        
+        logger.info('Settings updated from Firebase Remote Config:', firebaseConfig);
+        return newSettings;
+      });
+    }
+  }, [firebaseInitialized, firebaseConfig]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);

@@ -25,6 +25,11 @@ export const APP_CONSTANTS = {
     TIMEOUT: 10000, // 10 seconds
     RETRY_ATTEMPTS: 3,
   },
+  FIREBASE: {
+    MIN_FETCH_INTERVAL: 60000, // 1 minute
+    FETCH_TIMEOUT: 10000, // 10 seconds
+    REFRESH_INTERVAL: 300000, // 5 minutes
+  },
 } as const;
 
 export const ROUTES = {

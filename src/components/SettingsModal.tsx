@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Save, Monitor, Clock, Wifi, Image } from 'lucide-react';
+import { X, Save, Monitor, Clock, Wifi, Image, Cloud } from 'lucide-react';
 import { AppSettings } from '../types';
+import { useFirebaseConfig } from '../hooks/useFirebaseConfig';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave
 }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
+  const { config: firebaseConfig, isInitialized: firebaseInitialized, isLoading: firebaseLoading } = useFirebaseConfig();
 
   if (!isOpen) return null;
 
@@ -42,22 +44,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center space-x-2 mb-3">
               <Clock className="w-5 h-5 text-indigo-600" />
               <h3 className="font-medium text-gray-900">Screenshot Interval</h3>
+              {firebaseInitialized && (
+                <div className="flex items-center space-x-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  <Cloud className={`w-3 h-3 ${firebaseLoading ? 'animate-pulse' : ''}`} />
+                  <span>{firebaseLoading ? 'Syncing...' : 'Remote'}</span>
+                </div>
+              )}
             </div>
-            <select
-              value={localSettings.screenshotInterval}
-              onChange={(e) => setLocalSettings({
-                ...localSettings,
-                screenshotInterval: parseInt(e.target.value)
-              })}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value={10}>Every 10 seconds</option>
-              <option value={20}>Every 20 seconds</option>
-              <option value={30}>Every 30 seconds</option>
-              <option value={60}>Every minute</option>
-              <option value={300}>Every 5 minutes</option>
-              <option value={600}>Every 10 minutes</option>
-            </select>
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Screenshot interval is controlled remotely via Firebase
+              </p>
+              {firebaseInitialized && (
+                <p className="text-sm font-medium text-gray-900 mt-1">
+                  Current interval: {firebaseConfig.screenshotInterval} seconds
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -83,38 +86,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center space-x-2 mb-3">
               <Monitor className="w-5 h-5 text-indigo-600" />
               <h3 className="font-medium text-gray-900">Auto Updates</h3>
+              {firebaseInitialized && (
+                <div className="flex items-center space-x-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  <Cloud className={`w-3 h-3 ${firebaseLoading ? 'animate-pulse' : ''}`} />
+                  <span>{firebaseLoading ? 'Syncing...' : 'Remote'}</span>
+                </div>
+              )}
             </div>
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localSettings.autoUpdate}
-                onChange={(e) => setLocalSettings({
-                  ...localSettings,
-                  autoUpdate: e.target.checked
-                })}
-                className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-              />
-              <span className="text-gray-700">Automatically download and install updates</span>
-            </label>
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Auto updates are controlled remotely via Firebase
+              </p>
+              {firebaseInitialized && (
+                <p className="text-sm font-medium text-gray-900 mt-1">
+                  Status: {firebaseConfig.autoSyncEnabled ? 'Enabled' : 'Disabled'}
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
             <div className="flex items-center space-x-2 mb-3">
               <Wifi className="w-5 h-5 text-indigo-600" />
               <h3 className="font-medium text-gray-900">Sync Settings</h3>
+              {firebaseInitialized && (
+                <div className="flex items-center space-x-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  <Cloud className={`w-3 h-3 ${firebaseLoading ? 'animate-pulse' : ''}`} />
+                  <span>{firebaseLoading ? 'Syncing...' : 'Remote'}</span>
+                </div>
+              )}
             </div>
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localSettings.syncOnline}
-                onChange={(e) => setLocalSettings({
-                  ...localSettings,
-                  syncOnline: e.target.checked
-                })}
-                className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-              />
-              <span className="text-gray-700">Sync screenshots when online</span>
-            </label>
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Sync settings are controlled remotely via Firebase
+              </p>
+              {firebaseInitialized && (
+                <p className="text-sm font-medium text-gray-900 mt-1">
+                  Status: {firebaseConfig.autoSyncEnabled ? 'Enabled' : 'Disabled'}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

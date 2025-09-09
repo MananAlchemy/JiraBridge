@@ -1,22 +1,5 @@
 import { logger } from '../utils/logger';
 
-// Declare the electronAPI interface for TypeScript
-declare global {
-  interface Window {
-    electronAPI?: {
-      captureScreenshot: () => Promise<ElectronScreenshotResult>;
-      getScreenInfo: () => Promise<ElectronScreenInfoResult>;
-      minimizeWindow: () => Promise<void>;
-      maximizeWindow: () => Promise<void>;
-      closeWindow: () => Promise<void>;
-      onCaptureScreenshot: (callback: () => void) => void;
-      onOpenSettings: (callback: () => void) => void;
-      onToggleTracking: (callback: () => void) => void;
-      removeAllListeners: (channel: string) => void;
-    };
-  }
-}
-
 export interface ElectronScreenshotResult {
   success: boolean;
   dataURL?: string;

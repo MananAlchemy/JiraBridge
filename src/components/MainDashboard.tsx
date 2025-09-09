@@ -75,6 +75,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     let interval: NodeJS.Timeout | null = null;
     
     if (isTracking) {
+      console.log(`📷 Setting up screenshot interval: ${settings.screenshotInterval} seconds`);
+      
       interval = setInterval(() => {
         captureScreenshot();
       }, settings.screenshotInterval * 1000); // Convert seconds to milliseconds
@@ -87,7 +89,10 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) {
+        console.log(`📷 Clearing screenshot interval (${settings.screenshotInterval}s)`);
+        clearInterval(interval);
+      }
     };
   }, [settings.screenshotInterval, lastCapture, captureScreenshot, isTracking]);
 
