@@ -258,7 +258,7 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
                   type="url"
                   value={jiraUrl}
                   onChange={(e) => setJiraUrl(e.target.value)}
-                  placeholder="https://your-domain.atlassian.net"
+                  placeholder={import.meta.env.VITE_JIRA_URL || "https://your-domain.atlassian.net"}
                   required
                   className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200"
                 />
@@ -268,7 +268,7 @@ export default function JiraConfig({ userEmail, onJiraConnected, onProjectChange
                 <label className="block text-sm font-medium mb-2 text-gray-700">
                   API Token
                   <a
-                    href="https://id.atlassian.com/manage-profile/security/api-tokens"
+                    href={import.meta.env.VITE_ATLASSIAN_TOKENS_URL || "https://id.atlassian.com/manage-profile/security/api-tokens"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 text-xs ml-2 hover:text-blue-700 transition-colors inline-flex items-center"

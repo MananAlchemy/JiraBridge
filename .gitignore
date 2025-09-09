@@ -15,6 +15,7 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+# Note: .env.production is tracked for deployment, but should not contain sensitive data
 
 # IDE files
 .vscode/

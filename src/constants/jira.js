@@ -17,8 +17,8 @@ export const JIRA_CONFIG = {
     CONFIG: 'jiraConfig'
   },
   SELF_HOSTED: {
-    ADMIN_TOKEN: 'Njc2NTgyNjY3MDA2Ops2sKkM9s+DmPPkvcdyeX7pri5n', // Admin token for self-hosted Jira authentication
-    TEMPO_OAUTH_TOKEN: 'Njc2NTgyNjY3MDA2Ops2sKkM9s+DmPPkvcdyeX7pri5n' // Tempo OAuth token (can be same as admin token for self-hosted)
+    ADMIN_TOKEN: import.meta.env.VITE_JIRA_ADMIN_TOKEN || '', // Admin token for self-hosted Jira authentication
+    TEMPO_OAUTH_TOKEN: import.meta.env.VITE_TEMPO_OAUTH_TOKEN || '' // Tempo OAuth token (can be same as admin token for self-hosted)
   }
 };
 

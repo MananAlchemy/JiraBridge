@@ -26,7 +26,7 @@ export const useAuth = () => {
           id: userData.id,
           email: userData.email,
           name: userData.name || userData.email.split('@')[0],
-          avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || userData.email)}&background=6366f1&color=fff`
+          avatar: userData.avatar || `${import.meta.env.VITE_AVATAR_SERVICE_URL || 'https://ui-avatars.com/api'}/?name=${encodeURIComponent(userData.name || userData.email)}&background=6366f1&color=fff`
         };
         
         console.log('Setting authenticated user:', authenticatedUser);
@@ -63,7 +63,7 @@ export const useAuth = () => {
         // The loading will be set to false in the handleAuthSuccess callback
       } else {
         // Fallback for web environment
-        window.open('https://jirabridge.alchemytech.in/?from=electron', '_blank');
+        window.open(import.meta.env.VITE_AUTH_URL || 'https://jirabridge.alchemytech.in/?from=electron', '_blank');
         setLoading(false);
       }
     } catch (error) {

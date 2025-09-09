@@ -20,23 +20,33 @@ const currentVersion = packageJson.version;
 
 console.log(`📦 Current version: ${currentVersion}`);
 
-// Build the application
-console.log('\n🔨 Building application...');
+// Check for production environment file
+const envProdPath = path.join(__dirname, '.env.production');
+const envProdTemplatePath = path.join(__dirname, 'env.production');
+
+if (!fs.existsSync(envProdPath) && fs.existsSync(envProdTemplatePath)) {
+  console.log('📋 Creating production environment file...');
+  fs.copyFileSync(envProdTemplatePath, envProdPath);
+  console.log('✅ Production environment file created from template');
+}
+
+// Build the application for production
+console.log('\n🔨 Building application for production...');
 try {
-  execSync('npm run build', { stdio: 'inherit' });
-  console.log('✅ Build completed successfully');
+  execSync('npm run build:prod', { stdio: 'inherit' });
+  console.log('✅ Production build completed successfully');
 } catch (error) {
-  console.error('❌ Build failed:', error.message);
+  console.error('❌ Production build failed:', error.message);
   process.exit(1);
 }
 
-// Build Electron app
-console.log('\n⚡ Building Electron app...');
+// Build Electron app for production
+console.log('\n⚡ Building Electron app for production...');
 try {
-  execSync('npm run electron:dist', { stdio: 'inherit' });
-  console.log('✅ Electron build completed successfully');
+  execSync('npm run electron:dist:prod', { stdio: 'inherit' });
+  console.log('✅ Electron production build completed successfully');
 } catch (error) {
-  console.error('❌ Electron build failed:', error.message);
+  console.error('❌ Electron production build failed:', error.message);
   process.exit(1);
 }
 

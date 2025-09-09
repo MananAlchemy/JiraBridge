@@ -33,7 +33,8 @@ function createWindow() {
 
   // Load the app
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+    mainWindow.loadURL(devServerUrl);
     // Open DevTools in development
     mainWindow.webContents.openDevTools();
     logger.info('Loaded development server URL');
@@ -298,7 +299,7 @@ ipcMain.handle('install-update', () => {
 // Authentication IPC handlers
 ipcMain.handle('open-auth-url', async () => {
   const { shell } = require('electron');
-  const authUrl = 'https://jirabridge.alchemytech.in/?from=electron';
+  const authUrl = process.env.VITE_AUTH_URL || 'https://jirabridge.alchemytech.in/?from=electron';
   logger.info('Opening auth URL:', authUrl);
   await shell.openExternal(authUrl);
 });
@@ -372,8 +373,11 @@ function setupAutoUpdater() {
   }
 
   // Configure auto-updater for GitHub releases
-  const server = 'https://api.github.com/repos/MananAlchemy/JiraBridge/releases/latest';
-  const url = `https://github.com/MananAlchemy/JiraBridge/releases/download/v${app.getVersion()}`;
+  const githubOwner = process.env.VITE_GITHUB_OWNER || 'MananAlchemy';
+  const githubRepo = process.env.VITE_GITHUB_REPO || 'JiraBridge';
+  const githubApiUrl = process.env.VITE_GITHUB_API_URL || 'https://api.github.com';
+  const server = `${githubApiUrl}/repos/${githubOwner}/${githubRepo}/releases/latest`;
+  const url = `https://github.com/${githubOwner}/${githubRepo}/releases/download/v${app.getVersion()}`;
   
   autoUpdater.setFeedURL({ url });
   

@@ -23,10 +23,10 @@ export const APP_CONFIG: AppConfig = {
 };
 
 export const APP_CONSTANTS = {
-  APP_NAME: 'ScreenCapture Pro',
-  APP_ID: 'com.screencapturepro.app',
-  VERSION: '1.0.0',
-  DEV_SERVER_URL: 'http://localhost:5173',
+  APP_NAME: process.env.VITE_APP_NAME || 'JiraBridge',
+  APP_ID: process.env.VITE_APP_ID || 'com.mananalchemy.jirabridge',
+  VERSION: process.env.VITE_APP_VERSION || '1.0.0',
+  DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173',
   IPC_CHANNELS: {
     CAPTURE_SCREENSHOT: 'capture-screenshot',
     GET_SCREEN_INFO: 'get-screen-info',
