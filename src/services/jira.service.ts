@@ -72,8 +72,10 @@ class JiraService {
     const jiraConfig = this.jiraConfig!;
     
     if (jiraConfig.type === 'self-hosted') {
-      return `Bearer ${jiraConfig.token}`;
+      // For self-hosted Jira, use Bearer token with admin token
+      return `Bearer ${JIRA_CONFIG.SELF_HOSTED.ADMIN_TOKEN}`;
     } else {
+      // For Atlassian Cloud, use Basic auth
       const base64Credentials = btoa(`${jiraConfig.email}:${jiraConfig.token}`);
       return `Basic ${base64Credentials}`;
     }
@@ -102,13 +104,45 @@ class JiraService {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`Jira API Error (${response.status}):`, {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          responseText: errorText.substring(0, 200) + (errorText.length > 200 ? '...' : '')
+        });
         throw errorHandler.handleApiError(
           { response: { status: response.status, data: errorText } },
           `API request to ${endpoint}`
         );
       }
 
-      return response.json();
+      const responseText = await response.text();
+      
+      // Check if we got HTML instead of JSON (common with auth errors)
+      if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+        console.error('Received HTML instead of JSON from Jira API:', {
+          url,
+          responseText: responseText.substring(0, 200) + '...'
+        });
+        throw new JiraError(
+          'Received HTML response instead of JSON. This usually indicates an authentication error or incorrect API endpoint.',
+          'INVALID_RESPONSE'
+        );
+      }
+
+      try {
+        return JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse JSON response:', {
+          url,
+          responseText: responseText.substring(0, 200) + '...',
+          parseError
+        });
+        throw new JiraError(
+          'Invalid JSON response from Jira API',
+          'INVALID_JSON'
+        );
+      }
     } catch (error) {
       throw errorHandler.handleApiError(error, `API request to ${endpoint}`);
     }
@@ -267,13 +301,20 @@ class JiraService {
       }
     };
     
+    // Ensure minimum duration of 1 minute (60 seconds) for Tempo
+    const minDurationSeconds = Math.max(workLogData.timeSpentSeconds, 60);
+    
+    if (workLogData.timeSpentSeconds < 60) {
+      console.log(`Duration adjusted from ${workLogData.timeSpentSeconds}s to minimum 60s (1 minute) for Tempo API`);
+    }
+    
     const tempoWorkLogData = {
       worker: workLogData.userKey,
       comment: workLogData.description,
       started: workLogData.startTime.toISOString(),
       endDate: workLogData.endTime.toISOString(), // Add endDate like in working code
-      timeSpentSeconds: workLogData.timeSpentSeconds,
-      billableSeconds: workLogData.timeSpentSeconds,
+      timeSpentSeconds: minDurationSeconds,
+      billableSeconds: minDurationSeconds,
       originTaskId: workLogData.taskKey,
       remainingEstimate: 0,
       includeNonWorkingDays: false
@@ -292,8 +333,13 @@ class JiraService {
         hasToken: !!jiraConfig.token,
         userKey: workLogData.userKey
       });
-      console.log('Auth Header:', authHeader);
+      console.log('Auth Header:', `Bearer ${JIRA_CONFIG.SELF_HOSTED.TEMPO_OAUTH_TOKEN}`);
       console.log('Request Data:', tempoWorkLogData);
+      console.log('Request Headers:', {
+        'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.TEMPO_OAUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      });
       console.log('============================');
 
       // Use IPC to make the request through the main process
@@ -305,7 +351,9 @@ class JiraService {
         method: 'POST',
         url: tempoUrl,
         headers: {
-          'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.ADMIN_TOKEN}`, // Use admin token like working code
+          'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.TEMPO_OAUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: tempoWorkLogData
       });
@@ -323,7 +371,7 @@ class JiraService {
         if (response.status === 403 || response.status === 401) {
           console.log('Tempo access denied, trying fallback to regular Jira worklog...');
           try {
-            return this.logWork(workLogData.taskKey, formatTimeSpent(workLogData.timeSpentSeconds), workLogData.description);
+            return this.logWork(workLogData.taskKey, formatTimeSpent(minDurationSeconds), workLogData.description);
           } catch (fallbackError) {
             console.error('Fallback worklog also failed:', fallbackError);
             throw new JiraError(
@@ -349,7 +397,7 @@ class JiraService {
       if (error instanceof JiraError && (error.code === 'HTTP_403' || error.code === 'HTTP_401')) {
         console.log('Tempo access denied, trying fallback to regular Jira worklog...');
         try {
-          return this.logWork(workLogData.taskKey, formatTimeSpent(workLogData.timeSpentSeconds), workLogData.description);
+          return this.logWork(workLogData.taskKey, formatTimeSpent(minDurationSeconds), workLogData.description);
         } catch (fallbackError) {
           console.error('Fallback worklog also failed:', fallbackError);
           throw new JiraError(
@@ -434,7 +482,9 @@ class JiraService {
           method: 'GET',
           url: tempoUrl,
           headers: {
-            'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.ADMIN_TOKEN}`, // Use admin token
+            'Authorization': `Bearer ${JIRA_CONFIG.SELF_HOSTED.TEMPO_OAUTH_TOKEN}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
         });
 
