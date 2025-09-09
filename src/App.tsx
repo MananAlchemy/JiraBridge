@@ -5,6 +5,7 @@ import { UpdateModal } from './components/UpdateModal';
 import { SettingsModal } from './components/SettingsModal';
 import { StatusBar } from './components/StatusBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ChatIcon } from './components/ChatIcon';
 import { useAuth } from './hooks/useAuth';
 import { useUpdates } from './hooks/useUpdates';
 import { useFirebaseConfig } from './hooks/useFirebaseConfig';
@@ -226,6 +227,14 @@ function App() {
           settings={settings}
           onSave={handleSaveSettings}
         />
+
+        {/* Floating Chat Icon - Only show when user is logged in */}
+        {user && (
+          <ChatIcon
+            onChatOpen={() => logger.info('Chat opened')}
+            onChatClose={() => logger.info('Chat closed')}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );
