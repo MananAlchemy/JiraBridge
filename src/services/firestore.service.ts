@@ -43,29 +43,57 @@ export class FirestoreService {
     try {
       const docRef = doc(db, 'timetrackingSessions', userEmail, date, 'daily');
       
-      // Convert Date objects to Timestamps in tasks
-      const dailyData: any = { ...data };
-      if (data.lastUpdated && data.lastUpdated instanceof Date) {
-        dailyData.lastUpdated = Timestamp.fromDate(data.lastUpdated);
+      // Get existing data to merge with
+      const docSnap = await getDoc(docRef);
+      let existingData: DailyTimeTracking;
+      
+      if (docSnap.exists()) {
+        existingData = docSnap.data() as DailyTimeTracking;
       } else {
-        dailyData.lastUpdated = serverTimestamp();
+        // Create new daily data structure
+        existingData = {
+          totalTimeSeconds: 0,
+          totalTimeFormatted: '0s',
+          sessionCount: 0,
+          screenshotCount: 0,
+          lastUpdated: serverTimestamp() as Timestamp,
+          tasks: {},
+        };
       }
 
-      // Convert timestamps in tasks
+      // Merge the new data with existing data
+      const mergedData: any = {
+        ...existingData,
+        totalTimeSeconds: Math.max(existingData.totalTimeSeconds, data.totalTimeSeconds),
+        totalTimeFormatted: data.totalTimeFormatted,
+        sessionCount: Math.max(existingData.sessionCount, data.sessionCount),
+        screenshotCount: Math.max(existingData.screenshotCount, data.screenshotCount),
+        lastUpdated: serverTimestamp(),
+      };
+
+      // Merge tasks - preserve existing tasks and add/update new ones
+      mergedData.tasks = { ...existingData.tasks };
       if (data.tasks) {
-        dailyData.tasks = {};
         for (const [taskKey, taskData] of Object.entries(data.tasks)) {
-          dailyData.tasks[taskKey] = { ...taskData };
-          if (taskData.lastUpdated && taskData.lastUpdated instanceof Date) {
-            dailyData.tasks[taskKey].lastUpdated = Timestamp.fromDate(taskData.lastUpdated);
+          if (mergedData.tasks[taskKey]) {
+            // If task exists, add to existing time
+            mergedData.tasks[taskKey].timeSpentSeconds += taskData.timeSpentSeconds;
+            mergedData.tasks[taskKey].timeSpentFormatted = this.formatTime(mergedData.tasks[taskKey].timeSpentSeconds);
+            mergedData.tasks[taskKey].sessionCount += taskData.sessionCount;
+            mergedData.tasks[taskKey].screenshotCount += taskData.screenshotCount;
+            mergedData.tasks[taskKey].lastUpdated = serverTimestamp();
           } else {
-            dailyData.tasks[taskKey].lastUpdated = serverTimestamp();
+            // If task doesn't exist, add it
+            mergedData.tasks[taskKey] = {
+              ...taskData,
+              lastUpdated: serverTimestamp(),
+            };
           }
         }
       }
 
-      await setDoc(docRef, dailyData);
-      logger.info('Daily time tracking data stored successfully', { userEmail, date });
+      await setDoc(docRef, mergedData);
+      logger.info('Daily time tracking data stored successfully with task merging', { userEmail, date, taskCount: Object.keys(mergedData.tasks).length });
       return true;
     } catch (error) {
       logger.error('Failed to store daily time tracking data:', error);
@@ -235,8 +263,8 @@ export class FirestoreService {
    */
   public async getDailyTimeTracking(userEmail: string, date: string): Promise<DailyTimeTracking | null> {
     try {
-      const docId = `${userEmail}_${date}`;
-      const docRef = doc(db, 'dailyTimeTracking', docId);
+      // Use hierarchical structure: timetrackingSessions/{userEmail}/{date}/daily
+      const docRef = doc(db, 'timetrackingSessions', userEmail, date, 'daily');
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -254,14 +282,10 @@ export class FirestoreService {
    */
   public async getTimeTrackingSessions(userEmail: string, date: string): Promise<TimeTrackingSession[]> {
     try {
-      const q = query(
-        collection(db, 'timeTrackingSessions'),
-        where('userEmail', '==', userEmail),
-        where('date', '==', date),
-        orderBy('startTime', 'asc')
-      );
+      // Use hierarchical structure: timetrackingSessions/{userEmail}/{date}/sessions
+      const sessionsRef = collection(db, 'timetrackingSessions', userEmail, date, 'sessions');
+      const querySnapshot = await getDocs(sessionsRef);
       
-      const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map(doc => doc.data() as TimeTrackingSession);
     } catch (error) {
       logger.error('Failed to get time tracking sessions:', error);

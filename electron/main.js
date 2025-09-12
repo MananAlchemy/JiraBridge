@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, screen, autoUpdater, globalShortcut } = require('electron');
 const path = require('path');
 const machineId = require('machine-id');
+const os = require('os');
 const isDev = process.env.NODE_ENV === 'development';
 
 // Simple logger for now
@@ -12,6 +13,7 @@ const logger = {
 };
 
 let mainWindow;
+let isQuitting = false;
 
 function createWindow() {
   logger.info('Creating main window');
@@ -54,6 +56,15 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     logger.info('Main window closed');
+  });
+
+  // Handle window close (before closed event)
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      logger.info('Main window hidden instead of closed');
+    }
   });
 
   // Handle external links
@@ -315,29 +326,87 @@ ipcMain.handle('open-auth-url', async () => {
 
 // Development IPC handlers
 ipcMain.handle('toggle-devtools', () => {
-  if (mainWindow && isDev) {
-    if (mainWindow.webContents.isDevToolsOpened()) {
-      mainWindow.webContents.closeDevTools();
-      logger.info('DevTools closed via IPC');
-    } else {
-      mainWindow.webContents.openDevTools();
-      logger.info('DevTools opened via IPC');
+  try {
+    if (isQuitting || !mainWindow || mainWindow.isDestroyed()) {
+      logger.warn('DevTools toggle requested but app is quitting or window destroyed');
+      return;
     }
+    
+    if (mainWindow && isDev) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+        logger.info('DevTools closed via IPC');
+      } else {
+        mainWindow.webContents.openDevTools();
+        logger.info('DevTools opened via IPC');
+      }
+    }
+  } catch (error) {
+    logger.error('Error in toggle-devtools handler:', error);
   }
 });
 
 ipcMain.handle('is-devtools-open', () => {
-  return mainWindow ? mainWindow.webContents.isDevToolsOpened() : false;
+  try {
+    if (isQuitting || !mainWindow || mainWindow.isDestroyed()) {
+      return false;
+    }
+    return mainWindow ? mainWindow.webContents.isDevToolsOpened() : false;
+  } catch (error) {
+    logger.error('Error in is-devtools-open handler:', error);
+    return false;
+  }
 });
+
+// Safe machine ID generation with fallback
+function getSafeMachineId() {
+  const maxRetries = 3;
+  const retryDelay = 200; // ms
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const id = machineId();
+      return { success: true, machineId: id };
+    } catch (error) {
+      const isBusyError = error.code === 'EBUSY' || error.code === 'EPERM' || 
+                         error.message.includes('resource busy') || 
+                         error.message.includes('unlink');
+      
+      if (isBusyError && attempt < maxRetries) {
+        logger.warn(`Machine ID generation failed (attempt ${attempt}/${maxRetries}), retrying:`, error.message);
+        // Use setTimeout for synchronous retry
+        const start = Date.now();
+        while (Date.now() - start < retryDelay * attempt) {
+          // Busy wait for retry delay
+        }
+        continue;
+      }
+      
+      // Fallback to hostname-based ID if machine-id fails
+      logger.warn('Machine ID generation failed, using fallback:', error.message);
+      const fallbackId = `fallback-${os.hostname()}-${os.platform()}-${os.arch()}`;
+      return { success: true, machineId: fallbackId, isFallback: true };
+    }
+  }
+}
 
 // IPC handler for getting machine ID
 ipcMain.handle('get-machine-id', async () => {
   try {
-    const id = machineId();
-    logger.info('Machine ID requested via IPC:', id);
-    return { success: true, machineId: id };
+    if (isQuitting || !mainWindow || mainWindow.isDestroyed()) {
+      logger.warn('Machine ID requested but app is quitting or window destroyed');
+      return { success: false, error: 'App is shutting down' };
+    }
+    
+    const result = getSafeMachineId();
+    if (result.success) {
+      logger.info('Machine ID requested via IPC:', result.machineId);
+    } else {
+      logger.error('Failed to get machine ID via IPC');
+    }
+    return result;
   } catch (error) {
-    logger.error('Failed to get machine ID via IPC:', error.message);
+    logger.error('Error in get-machine-id handler:', error);
     return { success: false, error: error.message };
   }
 });
@@ -574,13 +643,16 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 app.whenReady().then(() => {
   logger.info('App ready, initializing...');
   
-  // Get and log machine ID
-  try {
-    const id = machineId();
-    logger.info('Machine ID:', id);
-    console.log('🖥️  Machine ID:', id);
-  } catch (error) {
-    logger.error('Failed to get machine ID:', error.message);
+  // Get and log machine ID with safe generation
+  const machineIdResult = getSafeMachineId();
+  if (machineIdResult.success) {
+    logger.info('Machine ID:', machineIdResult.machineId);
+    console.log('🖥️  Machine ID:', machineIdResult.machineId);
+    if (machineIdResult.isFallback) {
+      logger.warn('Using fallback machine ID due to generation issues');
+    }
+  } else {
+    logger.error('Failed to get machine ID');
   }
   
   createWindow();
@@ -600,15 +672,36 @@ app.on('window-all-closed', () => {
   // macOS specific: keep app running even when all windows are closed
   if (process.platform !== 'darwin') {
     logger.info('All windows closed, quitting application');
+    isQuitting = true;
     app.quit();
   }
 });
 
+// Cleanup before app quits
+app.on('before-quit', (event) => {
+  logger.info('App is about to quit, setting quit flag');
+  isQuitting = true;
+});
+
 // Cleanup global shortcuts when app is quitting
-app.on('will-quit', () => {
-  if (isDev) {
-    globalShortcut.unregisterAll();
-    logger.info('Global shortcuts unregistered');
+app.on('will-quit', (event) => {
+  logger.info('App will quit, performing cleanup');
+  
+  try {
+    // Unregister global shortcuts
+    if (globalShortcut.isRegistered) {
+      globalShortcut.unregisterAll();
+      logger.info('Global shortcuts unregistered');
+    }
+    
+    // Clean up main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.removeAllListeners();
+      mainWindow = null;
+      logger.info('Main window cleaned up');
+    }
+  } catch (error) {
+    logger.error('Error during cleanup:', error);
   }
 });
 

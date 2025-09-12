@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Settings, TrendingUp } from 'lucide-react';
+import { Play, Square, Settings, TrendingUp, Users } from 'lucide-react';
 import { ScreenshotGrid } from './ScreenshotGrid';
 import JiraConfig from './JiraConfig';
 import TaskSelector from './TaskSelector';
 import { WorkLogModal } from './WorkLogModal';
+import { StandupModal } from './StandupModal';
 import { useScreenshots } from '../hooks/useScreenshots';
 import { useTimeTracking } from '../hooks/useTimeTracking';
 import { useJira } from '../hooks/useJira';
 import { useWorkLog } from '../hooks/useWorkLog';
 import { useAuth } from '../hooks/useAuth';
+import { useStandup } from '../hooks/useStandup';
 import { AppSettings } from '../types';
 
 interface MainDashboardProps {
@@ -62,6 +64,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
   const [nextCapture, setNextCapture] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showWorkLogModal, setShowWorkLogModal] = useState(false);
+  const [showStandupModal, setShowStandupModal] = useState(false);
   const [pendingSession, setPendingSession] = useState<{
     startTime: Date;
     endTime: Date;
@@ -69,6 +72,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
   } | null>(null);
 
   const { logWorkToTempo, updateTaskStatus } = useWorkLog();
+  const { sendStandup, isSubmitting, lastSubmission } = useStandup();
 
   useEffect(() => {
     // Set up automatic screenshot capture only when tracking is active
@@ -226,6 +230,10 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
     }
   };
 
+  const handleStandupClick = () => {
+    setShowStandupModal(true);
+  };
+
   return (
     <div className="bg-gray-50">
       <div className="p-6">
@@ -235,15 +243,26 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Time Tracking Dashboard</h1>
               <p className="text-gray-600">Monitor your work time with automatic screenshot capture</p>
             </div>
-            <button
-              onClick={onSettingsClick}
-              className="bg-orange-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
-            >
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={handleStandupClick}
+                className="bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                title="Open standup modal to send today's work summary"
+              >
+                <Users className="w-4 h-4" />
+                <span>Standup</span>
+              </button>
+              <button
+                onClick={onSettingsClick}
+                className="bg-orange-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
+              >
+                <Settings className="w-4 h-4" />
+                <span>Settings</span>
+              </button>
+            </div>
           </div>
         </div>
+
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Jira Project Box - First */}
@@ -483,6 +502,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({ onSettingsClick, s
             onStatusChange={handleStatusChange}
           />
         )}
+
+        {/* Standup Modal */}
+        <StandupModal
+          isOpen={showStandupModal}
+          onClose={() => setShowStandupModal(false)}
+        />
       </div>
     </div>
   );

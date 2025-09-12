@@ -37,10 +37,10 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
     }
   }, [isTracking, currentSession]);
 
-  // Minute-based Firestore updates
+  // 10-second based Firestore updates
   useEffect(() => {
     if (isTracking && currentSession && user?.email) {
-      const minuteInterval = setInterval(async () => {
+      const tenSecondInterval = setInterval(async () => {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
         const now = new Date();
         const sessionDuration = Math.floor((now.getTime() - currentSession.startTime.getTime()) / 1000);
@@ -51,25 +51,25 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
           durationFormatted: getFormattedTime(sessionDuration * 1000),
         });
 
-        // Update daily time tracking (add 60 seconds for the minute that passed)
+        // Update daily time tracking (add 10 seconds for the 10-second interval that passed)
         await updateDailyTimeTracking(
           user.email, 
           today, 
-          60, // 1 minute = 60 seconds
+          10, // 10 seconds
           selectedJiraTask?.key,
           selectedJiraTask?.summary,
           selectedJiraTask?.project.name
         );
 
-        logger.info('Minute-based Firestore update completed', { 
+        logger.info('10-second Firestore update completed', { 
           userEmail: user.email, 
           date: today, 
           sessionId: currentSession.id,
-          additionalTime: 60 
+          additionalTime: 10 
         });
-      }, 60000); // Update every minute (60 seconds)
+      }, 10000); // Update every 10 seconds
 
-      return () => clearInterval(minuteInterval);
+      return () => clearInterval(tenSecondInterval);
     }
   }, [isTracking, currentSession, user, selectedJiraTask, updateTimeTrackingSession, updateDailyTimeTracking]);
 
@@ -212,7 +212,6 @@ export const useTimeTracking = (selectedJiraTask?: JiraTask | null) => {
           jiraTaskSummary: selectedJiraTask?.summary,
           jiraProject: selectedJiraTask?.project.name,
           screenshotIds: [],
-          lastUpdated: now,
         });
       }
       

@@ -123,13 +123,13 @@ export const useFirebaseConfig = () => {
     initializeConfig();
   }, [initializeConfig]);
 
-  // Set up periodic refresh every minute
+  // Set up periodic refresh every 4 hours
   useEffect(() => {
     if (!isInitialized) return;
 
     const interval = setInterval(() => {
       refreshConfig();
-    }, 60000); // 1 minute = 60,000 milliseconds
+    }, 14400000); // 4 hours = 14,400,000 milliseconds
 
     return () => clearInterval(interval);
   }, [isInitialized, refreshConfig]);

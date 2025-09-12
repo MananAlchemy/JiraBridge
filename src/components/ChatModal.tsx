@@ -8,6 +8,7 @@ interface ChatMessage {
   sender: 'user' | 'bot';
   timestamp: Date;
   type?: 'text' | 'system';
+  isHtml?: boolean;
 }
 
 interface ChatModalProps {
@@ -20,14 +21,19 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
-      text: "Hi there! 👋 How can I help you today?",
+      text: "Hi there! 👋 I'm your AI assistant powered by n8n. How can I help you today?",
       sender: 'bot',
       timestamp: new Date(),
     }
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const generateSessionId = () => {
+    return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,6 +42,18 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Generate session ID when chat opens
+  useEffect(() => {
+    if (isOpen && !sessionId) {
+      const newSessionId = generateSessionId();
+      setSessionId(newSessionId);
+      console.log('Chat session started with ID:', newSessionId);
+    } else if (!isOpen && sessionId) {
+      console.log('Chat session ended with ID:', sessionId);
+      setSessionId(''); // Reset session ID when chat closes
+    }
+  }, [isOpen, sessionId]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
@@ -48,20 +66,64 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const queryText = inputText.trim();
     setInputText('');
     setIsTyping(true);
 
-    // Simulate bot response
-    setTimeout(() => {
+    try {
+      // Send query to n8n webhook
+      const response = await fetch('https://n8n.alchemytech.in/webhook/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: queryText,
+          user: user?.email || 'anonymous',
+          sessionId: sessionId,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Handle array response format with HTML content
+      let responseText = 'Sorry, I couldn\'t process your request.';
+      if (Array.isArray(data) && data.length > 0 && data[0].output) {
+        responseText = data[0].output;
+      } else if (data.message) {
+        responseText = data.message;
+      } else if (data.response) {
+        responseText = data.response;
+      }
+      
       const botResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        text: getBotResponse(inputText.trim()),
+        text: responseText,
+        sender: 'bot',
+        timestamp: new Date(),
+        isHtml: true, // Mark as HTML content
+      };
+      
+      setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      console.error('Error sending message to webhook:', error);
+      
+      // Fallback to local response if API fails
+      const fallbackResponse: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        text: getBotResponse(queryText),
         sender: 'bot',
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, botResponse]);
+      setMessages(prev => [...prev, fallbackResponse]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 2000);
+    }
   };
 
   const getBotResponse = (userInput: string): string => {
@@ -110,7 +172,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed bottom-20 right-24 w-[450px] h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-40 flex flex-col overflow-hidden">
+    <div className="fixed bottom-20 right-24 w-[500px] h-[700px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-40 flex flex-col overflow-hidden">
       {/* Chat Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white">
         <div className="flex items-center space-x-4">
@@ -178,7 +240,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
                   ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
                   : 'bg-white text-gray-800 border border-gray-100 shadow-md'
               }`}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                {message.isHtml ? (
+                  <div 
+                    className="text-sm leading-relaxed prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: message.text }}
+                  />
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                )}
                 <span className={`text-xs mt-2 block opacity-70 ${
                   message.sender === 'user' ? 'text-blue-100' : 'text-gray-500'
                 }`}>
@@ -238,7 +307,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
         <p className="text-xs text-gray-400 mt-3 text-center">
-          💬 AI Assistant • Ask me anything about time tracking, screenshots, or Jira integration!
+          🤖 AI Assistant powered by n8n • Ask me anything!
         </p>
       </div>
     </div>

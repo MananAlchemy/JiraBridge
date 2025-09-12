@@ -39,13 +39,30 @@ export class FileManager {
   }
 
   async deleteScreenshot(filename: string): Promise<void> {
-    try {
-      const filePath = path.join(this.screenshotsDir, filename);
-      await fs.unlink(filePath);
-      logger.info('Screenshot deleted:', filePath);
-    } catch (error) {
-      logger.error('Failed to delete screenshot:', error);
-      throw error;
+    const filePath = path.join(this.screenshotsDir, filename);
+    
+    // Retry logic for Windows file locking issues
+    const maxRetries = 3;
+    const retryDelay = 100; // ms
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await fs.unlink(filePath);
+        logger.info('Screenshot deleted:', filePath);
+        return;
+      } catch (error: any) {
+        const isBusyError = error.code === 'EBUSY' || error.code === 'EPERM' || error.message.includes('resource busy');
+        
+        if (isBusyError && attempt < maxRetries) {
+          logger.warn(`File busy, retrying delete (attempt ${attempt}/${maxRetries}):`, filePath);
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
+        }
+        
+        // If it's the last attempt or not a busy error, throw
+        logger.error('Failed to delete screenshot:', error);
+        throw error;
+      }
     }
   }
 
